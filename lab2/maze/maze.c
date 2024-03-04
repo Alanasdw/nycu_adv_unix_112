@@ -69,6 +69,8 @@ static const struct file_operations maze_dev_fops = {
 
 static int maze_proc_read(struct seq_file *m, void *v) {
 	char buf[] = "#00: vacancy\n\n#01: vacancy\n\n#02: vacancy\n\n";
+
+	// check the individual files
 	seq_printf(m, buf);
 	return 0;
 }
