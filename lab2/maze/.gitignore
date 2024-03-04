@@ -1,0 +1,8 @@
+*
+
+!.gitignore
+!hello.c
+!Makefile
+!maze.c
+!mazetest
+
