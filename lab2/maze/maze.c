@@ -62,11 +62,117 @@ static ssize_t maze_dev_write(struct file *f, const char __user *buf, size_t len
 	return len;
 }
 
+static void generate_maze( int location, coord_t dims)
+{
+	all_mazes[ location].w = dims.x;
+	all_mazes[ location].h = dims.y;
+
+	// temp values
+	all_mazes[ location].ex = 2;
+	all_mazes[ location].ey = 3;
+	all_mazes[ location].sx = 3;
+	all_mazes[ location].sy = 3;
+
+	all_maze_attr[ location].player_pos = (coord_t){ all_mazes[ location].sx, all_mazes[ location].sy};
+
+	// all_mazes[ 0].w = 11;
+	// all_mazes[ 0].h = 7;
+	for ( int i = 0; i < all_mazes[ 0].h; i += 1)
+	{
+		for ( int j = 0; j < all_mazes[ 0].w; j += 1)
+		{
+			char write = 0;
+			if ( i == 0 || i == all_mazes[ 0].h - 1)
+			{
+				write = '#';
+			}// if
+			else if ( j == 0 || j == all_mazes[ 0].w - 1)
+			{
+				write = '#';
+			}// else if
+			else
+			{
+				write = '.';
+			}// else
+			all_mazes[ 0].blk[ i][ j] = write;
+		}//for j
+	}// for i
+
+
+	return;
+}
+
 static long maze_dev_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
 	printk(KERN_INFO "maze: ioctl cmd=%u arg=%lu.\n", cmd, arg);
 
-	
-	return 0;
+	long retval = 0;
+
+	switch ( cmd)
+	{
+	case MAZE_CREATE:
+		// check if already used one slot
+		int using = 0;
+		for ( int i = 0; i < _MAZE_MAXUSER; i += 1)
+		{
+			if ( all_maze_attr[ i].host_process == current -> pid)
+			{
+				retval = -EEXIST;
+				goto ioctl_ret;
+			}// if
+			if ( all_maze_attr[ i].host_process != 0)
+			{
+				using += 1;
+			}// if
+		}// for i
+
+		// check for space
+		if ( using == _MAZE_MAXUSER)
+		{
+			retval = -ENOMEM;
+			goto ioctl_ret;
+		}// if
+		
+		// read parameters
+		coord_t dims = { 0};
+		if ( copy_from_user( &dims, (void *)arg, sizeof(coord_t)))
+		{
+			retval = -EBUSY;
+			goto ioctl_ret;
+		}// if
+
+		// check parameter values
+		if ( dims.x > _MAZE_MAXX || dims.y > _MAZE_MAXY ||
+			dims.x <= 0 || dims.y <= 0)
+		{
+			retval = -EINVAL;
+			goto ioctl_ret;
+		}// if
+		
+		printk( KERN_INFO "pid:%d, MAZE_CREATE (%d, %d)\n", current -> pid, dims.x, dims.y);
+		generate_maze( using, dims);
+		break;
+	case MAZE_RESET:
+		break;
+	case MAZE_DESTROY:
+		break;
+	case MAZE_GETSIZE:
+		break;
+	case MAZE_MOVE:
+		break;
+	case MAZE_GETPOS:
+		break;
+	case MAZE_GETSTART:
+		break;
+	case MAZE_GETEND:
+		break;
+	default:
+		retval = -ENOTTY;
+		goto ioctl_ret;
+		break;
+	}// switch
+
+ioctl_ret:
+	return retval;
 }
 
 static const struct file_operations maze_dev_fops = {
@@ -180,32 +286,32 @@ static int __init maze_init(void)
 	// init maze attr
 	memset( all_maze_attr, 0, sizeof( all_maze_attr));
 
-	// test matrix
-	all_maze_attr[ 0].host_process = 69;
-	all_maze_attr[ 0].player_pos = (coord_t){ 2, 3};
+	// // test matrix
+	// all_maze_attr[ 0].host_process = 69;
+	// all_maze_attr[ 0].player_pos = (coord_t){ 2, 3};
 
-	all_mazes[ 0].w = 11;
-	all_mazes[ 0].h = 7;
-	for ( int i = 0; i < all_mazes[ 0].h; i += 1)
-	{
-		for ( int j = 0; j < all_mazes[ 0].w; j += 1)
-		{
-			char write = 0;
-			if ( i == 0 || i == all_mazes[ 0].h - 1)
-			{
-				write = '#';
-			}// if
-			else if ( j == 0 || j == all_mazes[ 0].w - 1)
-			{
-				write = '#';
-			}// else if
-			else
-			{
-				write = '.';
-			}// else
-			all_mazes[ 0].blk[ i][ j] = write;
-		}//for j
-	}// for i
+	// all_mazes[ 0].w = 11;
+	// all_mazes[ 0].h = 7;
+	// for ( int i = 0; i < all_mazes[ 0].h; i += 1)
+	// {
+	// 	for ( int j = 0; j < all_mazes[ 0].w; j += 1)
+	// 	{
+	// 		char write = 0;
+	// 		if ( i == 0 || i == all_mazes[ 0].h - 1)
+	// 		{
+	// 			write = '#';
+	// 		}// if
+	// 		else if ( j == 0 || j == all_mazes[ 0].w - 1)
+	// 		{
+	// 			write = '#';
+	// 		}// else if
+	// 		else
+	// 		{
+	// 			write = '.';
+	// 		}// else
+	// 		all_mazes[ 0].blk[ i][ j] = write;
+	// 	}//for j
+	// }// for i
 	
 
 	printk(KERN_INFO "maze: initialized.\n");
