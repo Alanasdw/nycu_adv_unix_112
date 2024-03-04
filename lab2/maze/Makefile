@@ -14,4 +14,4 @@ clean:
 
 install: all
 	mkdir -p ../rootfs/modules
-	cp hello set_env.sh mazetest maze.ko ../rootfs/modules
+	cp hello mazetest maze.ko ../rootfs/modules
