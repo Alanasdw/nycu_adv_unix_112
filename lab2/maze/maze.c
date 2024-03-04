@@ -28,6 +28,15 @@ static DEFINE_MUTEX(maze1_lock);
 static DEFINE_MUTEX(maze2_lock);
 static DEFINE_MUTEX(maze3_lock);
 
+// internel kernel struct
+typedef struct
+{
+	int host_process;
+	coord_t player_pos;
+} maze_attr;
+
+static maze_attr all_maze_attr[ 3];
+
 
 static int maze_dev_open(struct inode *i, struct file *f) {
 	printk(KERN_INFO "maze: device opened.\n");
@@ -55,6 +64,8 @@ static ssize_t maze_dev_write(struct file *f, const char __user *buf, size_t len
 
 static long maze_dev_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
 	printk(KERN_INFO "maze: ioctl cmd=%u arg=%lu.\n", cmd, arg);
+
+	
 	return 0;
 }
 
@@ -68,10 +79,65 @@ static const struct file_operations maze_dev_fops = {
 };
 
 static int maze_proc_read(struct seq_file *m, void *v) {
-	char buf[] = "#00: vacancy\n\n#01: vacancy\n\n#02: vacancy\n\n";
+	char buf[ 128];
 
 	// check the individual files
-	seq_printf(m, buf);
+	for ( int i = 0; i < _MAZE_MAXUSER; i += 1)
+	{
+		memset( buf, 0, sizeof( buf));
+		// choose the mutex lock
+		struct mutex *using;
+		switch ( i)
+		{
+		case 0:
+			using = &maze1_lock;
+			break;
+		case 1:
+			using = &maze2_lock;
+			break;
+		case 2:
+			using = &maze3_lock;
+			break;
+		
+		default:
+			break;
+		}// switch
+
+		sprintf( buf, "#0%d: ", i);
+		mutex_lock( using);
+		if ( all_maze_attr[ i].host_process == 0)
+		{
+			strncat( buf, "vacancy\n", strlen("vacancy\n"));
+			seq_printf(m, buf);
+		}// if
+		else
+		{
+			// print the maze
+			seq_printf(m, buf);
+			// #00: pid 75 - [19 x 19]: (3, 11) -> (17, 7) @ (3, 11)
+			sprintf( buf, "pid %d - [%d x %d]: (%d, %d) -> (%d, %d) @ (%d, %d)\n",
+					all_maze_attr[ i].host_process,
+					all_mazes[ i].w, all_mazes[ i].h,
+					all_mazes[ i].sx, all_mazes[ i].sy,
+					all_mazes[ i].ex, all_mazes[ i].ey,
+					all_maze_attr[ i].player_pos.x, all_maze_attr[ i].player_pos.y);
+			seq_printf(m, buf);
+
+			// - 000: #################################
+			for ( int j = 0; j < all_mazes[ i].h; j += 1)
+			{
+				memset( buf, 0, sizeof( buf));
+				sprintf( buf, "- %03d: ", j);
+				// the maze contents
+				strncat( buf, all_mazes[ i].blk[ j], _MAZE_MAXX * sizeof(char));
+				strncat( buf, "\n", sizeof(char));
+				seq_printf( m, buf);
+			}// for j
+		}// else
+		mutex_unlock( using);
+		seq_printf(m, "\n");
+	}// for i
+
 	return 0;
 }
 
@@ -110,7 +176,37 @@ static int __init maze_init(void)
 	proc_create("maze", 0, NULL, &maze_proc_fops);
 
 	// init maze space
-	memset( all_mazes, 0, sizeof(all_mazes));
+	memset( all_mazes, 0, sizeof( all_mazes));
+	// init maze attr
+	memset( all_maze_attr, 0, sizeof( all_maze_attr));
+
+	// test matrix
+	all_maze_attr[ 0].host_process = 69;
+	all_maze_attr[ 0].player_pos = (coord_t){ 2, 3};
+
+	all_mazes[ 0].w = 11;
+	all_mazes[ 0].h = 7;
+	for ( int i = 0; i < all_mazes[ 0].h; i += 1)
+	{
+		for ( int j = 0; j < all_mazes[ 0].w; j += 1)
+		{
+			char write = 0;
+			if ( i == 0 || i == all_mazes[ 0].h - 1)
+			{
+				write = '#';
+			}// if
+			else if ( j == 0 || j == all_mazes[ 0].w - 1)
+			{
+				write = '#';
+			}// else if
+			else
+			{
+				write = '.';
+			}// else
+			all_mazes[ 0].blk[ i][ j] = write;
+		}//for j
+	}// for i
+	
 
 	printk(KERN_INFO "maze: initialized.\n");
 	return 0;    // Non-zero return means that the module couldn't be loaded.

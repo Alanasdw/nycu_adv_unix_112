@@ -12,7 +12,7 @@ typedef struct {
 }	coord_t;
 
 typedef struct {
-	int w, h;
+	int w, h;		// both set to 0 if not generated
 	int sx, sy;		// initial position
 	int ex, ey;		// target  position
 	char blk[_MAZE_MAXY][_MAZE_MAXX];
