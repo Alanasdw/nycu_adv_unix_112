@@ -108,9 +108,6 @@ if __name__ == "__main__":
         # print( decode( given))
         r.sendline( str( value).encode())
 
-
-    print("simple ---------------------------------------------")
-
     r.interactive()
     r.close()
 
