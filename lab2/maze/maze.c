@@ -17,9 +17,17 @@
 #include <linux/device.h>
 #include <linux/cdev.h>
 
+#include "maze.h"			// for maze things
+
 static dev_t devnum;
 static struct cdev c_dev;
 static struct class *clazz;
+
+static maze_t all_mazes[ 3];
+static DEFINE_MUTEX(maze1_lock);
+static DEFINE_MUTEX(maze2_lock);
+static DEFINE_MUTEX(maze3_lock);
+
 
 static int maze_dev_open(struct inode *i, struct file *f) {
 	printk(KERN_INFO "maze: device opened.\n");
@@ -38,6 +46,10 @@ static ssize_t maze_dev_read(struct file *f, char __user *buf, size_t len, loff_
 
 static ssize_t maze_dev_write(struct file *f, const char __user *buf, size_t len, loff_t *off) {
 	printk(KERN_INFO "maze: write %zu bytes @ %llu.\n", len, *off);
+	
+	// check each lock
+	
+	
 	return len;
 }
 
@@ -56,7 +68,7 @@ static const struct file_operations maze_dev_fops = {
 };
 
 static int maze_proc_read(struct seq_file *m, void *v) {
-	char buf[] = "`hello, world!` in /proc.\n";
+	char buf[] = "#00: vacancy\n\n#01: vacancy\n\n#02: vacancy\n\n";
 	seq_printf(m, buf);
 	return 0;
 }
@@ -94,6 +106,9 @@ static int __init maze_init(void)
 
 	// create proc
 	proc_create("maze", 0, NULL, &maze_proc_fops);
+
+	// init maze space
+	memset( all_mazes, 0, sizeof(all_mazes));
 
 	printk(KERN_INFO "maze: initialized.\n");
 	return 0;    // Non-zero return means that the module couldn't be loaded.

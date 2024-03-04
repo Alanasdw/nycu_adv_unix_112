@@ -5,4 +5,5 @@
 !Makefile
 !maze.c
 !mazetest
-
+!mazetest.c
+!maze.h
