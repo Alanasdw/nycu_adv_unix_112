@@ -61,6 +61,7 @@ static ssize_t maze_dev_write(struct file *f, const char __user *buf, size_t len
 	return len;
 }
 
+// still need work
 static void generate_maze( int location, coord_t dims)
 {
 	all_mazes[ location].w = dims.x;
@@ -76,16 +77,16 @@ static void generate_maze( int location, coord_t dims)
 
 	// all_mazes[ 0].w = 11;
 	// all_mazes[ 0].h = 7;
-	for ( int i = 0; i < all_mazes[ 0].h; i += 1)
+	for ( int i = 0; i < all_mazes[ location].h; i += 1)
 	{
-		for ( int j = 0; j < all_mazes[ 0].w; j += 1)
+		for ( int j = 0; j < all_mazes[ location].w; j += 1)
 		{
 			char write = 0;
-			if ( i == 0 || i == all_mazes[ 0].h - 1)
+			if ( i == 0 || i == all_mazes[ location].h - 1)
 			{
 				write = '#';
 			}// if
-			else if ( j == 0 || j == all_mazes[ 0].w - 1)
+			else if ( j == 0 || j == all_mazes[ location].w - 1)
 			{
 				write = '#';
 			}// else if
@@ -93,10 +94,9 @@ static void generate_maze( int location, coord_t dims)
 			{
 				write = '.';
 			}// else
-			all_mazes[ 0].blk[ i][ j] = write;
+			all_mazes[ location].blk[ i][ j] = write;
 		}//for j
 	}// for i
-
 
 	return;
 }
@@ -151,8 +151,8 @@ static long maze_dev_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		}// if
 		
 		printk( KERN_INFO "pid:%d, MAZE_CREATE (%d, %d)\n", current -> pid, dims.x, dims.y);
+		all_maze_attr[ using].host_process = current -> pid;
 		generate_maze( using, dims);
-
 		mutex_unlock( &maze_lock);
 		break;
 	case MAZE_RESET:
@@ -223,6 +223,26 @@ static int maze_proc_read(struct seq_file *m, void *v) {
 				sprintf( buf, "- %03d: ", j);
 				// the maze contents
 				strncat( buf, all_mazes[ i].blk[ j], _MAZE_MAXX * sizeof(char));
+				// overwrite the special points
+				if ( all_mazes[ i].ey == j)
+				{
+					// end point is on this line
+					int offset = strlen("- %03d: ");
+					buf[ offset + all_mazes[ i].ex] = 'E';
+				}// if
+				if ( all_mazes[ i].sy == j)
+				{
+					// start point is on this line
+					int offset = strlen("- %03d: ");
+					buf[ offset + all_mazes[ i].sx] = 'S';
+				}// if
+				if ( all_maze_attr[ i].player_pos.y == j)
+				{
+					// player point is on this line
+					int offset = strlen("- %03d: ");
+					buf[ offset + all_maze_attr[ i].player_pos.x] = '*';
+				}// if
+				
 				strncat( buf, "\n", sizeof(char));
 				seq_printf( m, buf);
 			}// for j
