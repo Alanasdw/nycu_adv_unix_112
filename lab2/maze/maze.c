@@ -42,13 +42,36 @@ static int maze_dev_open(struct inode *i, struct file *f) {
 	return 0;
 }
 
+static void maze_release( int location)
+{
+	memset( &all_mazes[ location], 0, sizeof( all_mazes[ location]));
+	memset( &all_maze_attr[ location], 0, sizeof( all_maze_attr[ location]));
+	return;
+}
+
 static int maze_dev_close(struct inode *i, struct file *f) {
 	printk(KERN_INFO "maze: device closed.\n");
+
+	// check if held any mazes
+	mutex_lock( &maze_lock);
+	for ( int i = 0; i < _MAZE_MAXUSER; i += 1)
+	{
+		if ( all_maze_attr[ i].host_process == current -> pid)
+		{
+			// free the maze
+			maze_release( i);
+			break;
+		}// if
+	}// for i
+	mutex_unlock( &maze_lock);
+
 	return 0;
 }
 
 static ssize_t maze_dev_read(struct file *f, char __user *buf, size_t len, loff_t *off) {
 	printk(KERN_INFO "maze: read %zu bytes @ %llu.\n", len, *off);
+	// only give the contents of the maze
+	// change to number for maze layout 1 for wall, 0 for path
 	return len;
 }
 
@@ -101,16 +124,36 @@ static void generate_maze( int location, coord_t dims)
 	return;
 }
 
+static int maze_check_usage( void)
+{
+	// return the location or _MAZE_MAXUSER if not found
+	int location = _MAZE_MAXUSER;
+
+	mutex_lock( &maze_lock);
+	for ( int i = 0; i < _MAZE_MAXUSER; i += 1)
+	{
+		if ( current -> pid == all_maze_attr[ i].host_process)
+		{
+			location = i;
+			break;
+		}// if
+	}// for i
+	mutex_unlock( &maze_lock);
+
+	return location;
+}
+
 static long maze_dev_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
-	printk(KERN_INFO "maze: ioctl cmd=%u arg=%lu.\n", cmd, arg);
+	// printk(KERN_INFO "maze: ioctl cmd=%u arg=%lu.\n", cmd, arg);
 
 	long retval = 0;
+	int using;
+	coord_t dims = { 0};
 
 	switch ( cmd)
 	{
 	case MAZE_CREATE:
 		// read parameters
-		coord_t dims = { 0};
 		if ( copy_from_user( &dims, (void *)arg, sizeof(coord_t)))
 		{
 			retval = -EBUSY;
@@ -125,50 +168,138 @@ static long maze_dev_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			goto ioctl_ret;
 		}// if
 		
-		mutex_lock( &maze_lock);
 		// check if already used one slot
-		int using = 0;
+		using = maze_check_usage();
+		if ( using != _MAZE_MAXUSER)
+		{
+			retval = -EEXIST;
+			goto ioctl_ret;
+		}// if
+
+		mutex_lock( &maze_lock);
+		// check for space and get the space usage
 		for ( int i = 0; i < _MAZE_MAXUSER; i += 1)
 		{
-			if ( all_maze_attr[ i].host_process == current -> pid)
+			if ( all_maze_attr[ i].host_process == 0)
 			{
-				retval = -EEXIST;
-				mutex_unlock( &maze_lock);
-				goto ioctl_ret;
-			}// if
-			if ( all_maze_attr[ i].host_process != 0)
-			{
-				using += 1;
+				using = i;
+				all_maze_attr[ i].host_process = current -> pid;
+				break;
 			}// if
 		}// for i
+		mutex_unlock( &maze_lock);
 
-		// check for space
 		if ( using == _MAZE_MAXUSER)
 		{
 			retval = -ENOMEM;
-			mutex_unlock( &maze_lock);
 			goto ioctl_ret;
 		}// if
 		
-		printk( KERN_INFO "pid:%d, MAZE_CREATE (%d, %d)\n", current -> pid, dims.x, dims.y);
+		// printk( KERN_INFO "pid:%d, MAZE_CREATE (%d, %d)\n", current -> pid, dims.x, dims.y);
 		all_maze_attr[ using].host_process = current -> pid;
 		generate_maze( using, dims);
-		mutex_unlock( &maze_lock);
 		break;
+
 	case MAZE_RESET:
+		// check if held maze
+		using = maze_check_usage();
+		if ( using == _MAZE_MAXUSER)
+		{
+			// no maze held
+			retval = -ENOENT;
+			goto ioctl_ret;
+		}// if
+		
+		all_maze_attr[ using].player_pos = (coord_t){ all_mazes[ using].sx, all_mazes[ using].sy};
 		break;
+
 	case MAZE_DESTROY:
+		// check if held maze
+		using = maze_check_usage();
+		if ( using == _MAZE_MAXUSER)
+		{
+			// no maze held
+			retval = -ENOENT;
+			goto ioctl_ret;
+		}// if
+
+		maze_release( using);
 		break;
+
 	case MAZE_GETSIZE:
+		// check if held maze
+		using = maze_check_usage();
+		if ( using == _MAZE_MAXUSER)
+		{
+			// no maze held
+			retval = -ENOENT;
+			goto ioctl_ret;
+		}// if
+
+		dims = (coord_t){ all_mazes[ using].w, all_mazes[ using].h};
+		if ( copy_to_user((void *)arg, &dims, sizeof(coord_t)))
+		{
+			retval = -EBUSY;
+			goto ioctl_ret;
+		}// if		
 		break;
+
 	case MAZE_MOVE:
 		break;
 	case MAZE_GETPOS:
+		// check if held maze
+		using = maze_check_usage();
+		if ( using == _MAZE_MAXUSER)
+		{
+			// no maze held
+			retval = -ENOENT;
+			goto ioctl_ret;
+		}// if
+
+		dims = all_maze_attr[ using].player_pos;
+		if ( copy_to_user((void *)arg, &dims, sizeof(coord_t)))
+		{
+			retval = -EBUSY;
+			goto ioctl_ret;
+		}// if
 		break;
+
 	case MAZE_GETSTART:
+		// check if held maze
+		using = maze_check_usage();
+		if ( using == _MAZE_MAXUSER)
+		{
+			// no maze held
+			retval = -ENOENT;
+			goto ioctl_ret;
+		}// if
+
+		dims = (coord_t){ all_mazes[ using].sx, all_mazes[ using].sy};
+		if ( copy_to_user((void *)arg, &dims, sizeof(coord_t)))
+		{
+			retval = -EBUSY;
+			goto ioctl_ret;
+		}// if
 		break;
+
 	case MAZE_GETEND:
+		// check if held maze
+		using = maze_check_usage();
+		if ( using == _MAZE_MAXUSER)
+		{
+			// no maze held
+			retval = -ENOENT;
+			goto ioctl_ret;
+		}// if
+
+		dims = (coord_t){ all_mazes[ using].ex, all_mazes[ using].ey};
+		if ( copy_to_user((void *)arg, &dims, sizeof(coord_t)))
+		{
+			retval = -EBUSY;
+			goto ioctl_ret;
+		}// if
 		break;
+
 	default:
 		retval = -ENOTTY;
 		goto ioctl_ret;
@@ -200,11 +331,16 @@ static int maze_proc_read(struct seq_file *m, void *v) {
 		mutex_lock( &maze_lock);
 		if ( all_maze_attr[ i].host_process == 0)
 		{
+			// no user in this part
+			mutex_unlock( &maze_lock);
 			strncat( buf, "vacancy\n", strlen("vacancy\n"));
 			seq_printf(m, buf);
 		}// if
 		else
 		{
+			// only user is this process
+			mutex_unlock( &maze_lock);
+
 			// print the maze
 			seq_printf(m, buf);
 			// #00: pid 75 - [19 x 19]: (3, 11) -> (17, 7) @ (3, 11)
@@ -247,7 +383,6 @@ static int maze_proc_read(struct seq_file *m, void *v) {
 				seq_printf( m, buf);
 			}// for j
 		}// else
-		mutex_unlock( &maze_lock);
 		seq_printf(m, "\n");
 	}// for i
 
@@ -292,34 +427,6 @@ static int __init maze_init(void)
 	memset( all_mazes, 0, sizeof( all_mazes));
 	// init maze attr
 	memset( all_maze_attr, 0, sizeof( all_maze_attr));
-
-	// // test matrix
-	// all_maze_attr[ 0].host_process = 69;
-	// all_maze_attr[ 0].player_pos = (coord_t){ 2, 3};
-
-	// all_mazes[ 0].w = 11;
-	// all_mazes[ 0].h = 7;
-	// for ( int i = 0; i < all_mazes[ 0].h; i += 1)
-	// {
-	// 	for ( int j = 0; j < all_mazes[ 0].w; j += 1)
-	// 	{
-	// 		char write = 0;
-	// 		if ( i == 0 || i == all_mazes[ 0].h - 1)
-	// 		{
-	// 			write = '#';
-	// 		}// if
-	// 		else if ( j == 0 || j == all_mazes[ 0].w - 1)
-	// 		{
-	// 			write = '#';
-	// 		}// else if
-	// 		else
-	// 		{
-	// 			write = '.';
-	// 		}// else
-	// 		all_mazes[ 0].blk[ i][ j] = write;
-	// 	}//for j
-	// }// for i
-	
 
 	printk(KERN_INFO "maze: initialized.\n");
 	return 0;    // Non-zero return means that the module couldn't be loaded.
