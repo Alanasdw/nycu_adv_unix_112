@@ -245,7 +245,36 @@ static long maze_dev_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		break;
 
 	case MAZE_MOVE:
+		// check if held maze
+		using = maze_check_usage();
+		if ( using == _MAZE_MAXUSER)
+		{
+			// no maze held
+			retval = -ENOENT;
+			goto ioctl_ret;
+		}// if
+
+		// get dims
+		if ( copy_from_user( &dims, (void *)arg, sizeof(coord_t)))
+		{
+			retval = -EBUSY;
+			goto ioctl_ret;
+		}// if
+
+		coord_t valid[ 4] = { (coord_t){ -1, 0}, (coord_t){ 0, -1}, (coord_t){ 1, 0}, (coord_t){ 0, 1}};
+		for ( int i = 0; i < 4; i += 1)
+		{
+			if ( dims.x == valid[ i].x && dims.y == valid[ i].y &&
+				all_mazes[ using].blk[ all_maze_attr[ using].player_pos.x + dims.x][ all_maze_attr[ using].player_pos.y + dims.y] == '.')
+			{
+				// one of the valid moves
+				all_maze_attr[ using].player_pos.x += dims.x;
+				all_maze_attr[ using].player_pos.y += dims.y;
+				break;
+			}// if
+		}// for i
 		break;
+
 	case MAZE_GETPOS:
 		// check if held maze
 		using = maze_check_usage();
