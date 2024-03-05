@@ -68,11 +68,59 @@ static int maze_dev_close(struct inode *i, struct file *f) {
 	return 0;
 }
 
+static int maze_check_usage( void)
+{
+	// return the location or _MAZE_MAXUSER if not found
+	int location = _MAZE_MAXUSER;
+
+	mutex_lock( &maze_lock);
+	for ( int i = 0; i < _MAZE_MAXUSER; i += 1)
+	{
+		if ( current -> pid == all_maze_attr[ i].host_process)
+		{
+			location = i;
+			break;
+		}// if
+	}// for i
+	mutex_unlock( &maze_lock);
+
+	return location;
+}
+
 static ssize_t maze_dev_read(struct file *f, char __user *buf, size_t len, loff_t *off) {
-	printk(KERN_INFO "maze: read %zu bytes @ %llu.\n", len, *off);
 	// only give the contents of the maze
 	// change to number for maze layout 1 for wall, 0 for path
-	return len;
+	ssize_t retval = 0;
+
+	int using = maze_check_usage();
+	if ( using == _MAZE_MAXUSER)
+	{
+		// no maze held
+		retval = -EBADFD;
+		goto read_ret;
+	}// if
+
+	// transfer line by line to not break frame size 2048 bytes
+	char map[ _MAZE_MAXX];
+
+	for ( int i = 0; i < all_mazes[ using].h; i += 1)
+	{
+		for ( int j = 0; j < all_mazes[ using].w; j += 1)
+		{
+			map[ j] = all_mazes[ using].blk[ i][ j] == '#';
+		}// for j
+
+		if ( copy_to_user( (void *)buf + *off, &map, all_mazes[ using].w * sizeof(char)))
+		{
+			retval = -EBUSY;
+			goto read_ret;
+		}// if
+		retval += all_mazes[ using].w;
+		*off += all_mazes[ using].w;
+	}// for i 
+
+read_ret:
+	return retval;
 }
 
 static ssize_t maze_dev_write(struct file *f, const char __user *buf, size_t len, loff_t *off) {
@@ -122,25 +170,6 @@ static void generate_maze( int location, coord_t dims)
 	}// for i
 
 	return;
-}
-
-static int maze_check_usage( void)
-{
-	// return the location or _MAZE_MAXUSER if not found
-	int location = _MAZE_MAXUSER;
-
-	mutex_lock( &maze_lock);
-	for ( int i = 0; i < _MAZE_MAXUSER; i += 1)
-	{
-		if ( current -> pid == all_maze_attr[ i].host_process)
-		{
-			location = i;
-			break;
-		}// if
-	}// for i
-	mutex_unlock( &maze_lock);
-
-	return location;
 }
 
 static long maze_dev_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
