@@ -23,10 +23,9 @@ static dev_t devnum;
 static struct cdev c_dev;
 static struct class *clazz;
 
+// lock all mazes, performance is not that important
 static maze_t all_mazes[ 3];
-static DEFINE_MUTEX(maze1_lock);
-static DEFINE_MUTEX(maze2_lock);
-static DEFINE_MUTEX(maze3_lock);
+static DEFINE_MUTEX(maze_lock);
 
 // internel kernel struct
 typedef struct
@@ -110,28 +109,6 @@ static long maze_dev_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	switch ( cmd)
 	{
 	case MAZE_CREATE:
-		// check if already used one slot
-		int using = 0;
-		for ( int i = 0; i < _MAZE_MAXUSER; i += 1)
-		{
-			if ( all_maze_attr[ i].host_process == current -> pid)
-			{
-				retval = -EEXIST;
-				goto ioctl_ret;
-			}// if
-			if ( all_maze_attr[ i].host_process != 0)
-			{
-				using += 1;
-			}// if
-		}// for i
-
-		// check for space
-		if ( using == _MAZE_MAXUSER)
-		{
-			retval = -ENOMEM;
-			goto ioctl_ret;
-		}// if
-		
 		// read parameters
 		coord_t dims = { 0};
 		if ( copy_from_user( &dims, (void *)arg, sizeof(coord_t)))
@@ -148,8 +125,35 @@ static long maze_dev_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			goto ioctl_ret;
 		}// if
 		
+		mutex_lock( &maze_lock);
+		// check if already used one slot
+		int using = 0;
+		for ( int i = 0; i < _MAZE_MAXUSER; i += 1)
+		{
+			if ( all_maze_attr[ i].host_process == current -> pid)
+			{
+				retval = -EEXIST;
+				mutex_unlock( &maze_lock);
+				goto ioctl_ret;
+			}// if
+			if ( all_maze_attr[ i].host_process != 0)
+			{
+				using += 1;
+			}// if
+		}// for i
+
+		// check for space
+		if ( using == _MAZE_MAXUSER)
+		{
+			retval = -ENOMEM;
+			mutex_unlock( &maze_lock);
+			goto ioctl_ret;
+		}// if
+		
 		printk( KERN_INFO "pid:%d, MAZE_CREATE (%d, %d)\n", current -> pid, dims.x, dims.y);
 		generate_maze( using, dims);
+
+		mutex_unlock( &maze_lock);
 		break;
 	case MAZE_RESET:
 		break;
@@ -191,26 +195,9 @@ static int maze_proc_read(struct seq_file *m, void *v) {
 	for ( int i = 0; i < _MAZE_MAXUSER; i += 1)
 	{
 		memset( buf, 0, sizeof( buf));
-		// choose the mutex lock
-		struct mutex *using;
-		switch ( i)
-		{
-		case 0:
-			using = &maze1_lock;
-			break;
-		case 1:
-			using = &maze2_lock;
-			break;
-		case 2:
-			using = &maze3_lock;
-			break;
-		
-		default:
-			break;
-		}// switch
 
 		sprintf( buf, "#0%d: ", i);
-		mutex_lock( using);
+		mutex_lock( &maze_lock);
 		if ( all_maze_attr[ i].host_process == 0)
 		{
 			strncat( buf, "vacancy\n", strlen("vacancy\n"));
@@ -240,7 +227,7 @@ static int maze_proc_read(struct seq_file *m, void *v) {
 				seq_printf( m, buf);
 			}// for j
 		}// else
-		mutex_unlock( using);
+		mutex_unlock( &maze_lock);
 		seq_printf(m, "\n");
 	}// for i
 
