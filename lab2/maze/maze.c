@@ -38,7 +38,7 @@ static maze_attr all_maze_attr[ 3];
 
 
 static int maze_dev_open(struct inode *i, struct file *f) {
-	printk(KERN_INFO "maze: device opened.\n");
+	// printk(KERN_INFO "maze: device opened.\n");
 	return 0;
 }
 
@@ -50,7 +50,7 @@ static void maze_release( int location)
 }
 
 static int maze_dev_close(struct inode *i, struct file *f) {
-	printk(KERN_INFO "maze: device closed.\n");
+	// printk(KERN_INFO "maze: device closed.\n");
 
 	// check if held any mazes
 	mutex_lock( &maze_lock);
@@ -124,11 +124,69 @@ read_ret:
 }
 
 static ssize_t maze_dev_write(struct file *f, const char __user *buf, size_t len, loff_t *off) {
-	printk(KERN_INFO "maze: write %zu bytes @ %llu.\n", len, *off);
+	// printk(KERN_INFO "maze: write %zu bytes @ %llu.\n", len, *off);
+
+	// check if maze is held
+	ssize_t retval = 0;
+
+	int using = maze_check_usage();
+	if ( using == _MAZE_MAXUSER)
+	{
+		// no maze held
+		retval = -EBADFD;
+		goto write_ret;
+	}// if
+
+	// check given bytes
+	if ( len % sizeof(coord_t) != 0)
+	{
+		retval = -EINVAL;
+		goto write_ret;
+	}// if
+
+	int move_count = len / sizeof(coord_t);
+	coord_t *given = kmalloc( len, GFP_KERNEL);
 	
-	// check each lock
+	if ( copy_from_user( given, buf, len))
+	{
+		retval = -EFAULT;
+		goto write_clean;
+	}// if
 	
+	coord_t total_offset = { 0};
+	coord_t valid[ 4] = { (coord_t){ -1, 0}, (coord_t){ 0, -1}, (coord_t){ 1, 0}, (coord_t){ 0, 1}};
 	
+	// int counter = 0;
+	// only move if valid, skip if not valid
+	for ( int i = 0; i < move_count; i += 1)
+	{
+		// check for valid moves
+		for ( int j = 0; j < 4; j += 1)
+		{
+			if ( valid[ j].x == given[ i].x && valid[ j].y == given[ i].y &&
+				all_mazes[ using].blk[ all_maze_attr[ using].player_pos.y + total_offset.y + given[ i].y][ all_maze_attr[ using].player_pos.x + total_offset.x + given[ i].x] == '.')
+			{
+				total_offset.x += given[ i].x;
+				total_offset.y += given[ i].y;
+				// counter += 1;
+				break;
+			}// if
+		}// for j
+		// printk( KERN_INFO "%d: pos(%d, %d), mov(%d, %d)\n", counter, all_maze_attr[ using].player_pos.x + total_offset.x,
+		// 																all_maze_attr[ using].player_pos.y + total_offset.y,
+		// 																given[ i].x, given[ i].y);
+	}// for i
+
+	// printk( KERN_INFO "%d == %d?\n", move_count, counter);
+	
+	all_maze_attr[ using].player_pos.x += total_offset.x;
+	all_maze_attr[ using].player_pos.y += total_offset.y;
+
+write_clean:
+	kfree( given);
+	given = NULL;
+
+write_ret:
 	return len;
 }
 
@@ -294,7 +352,7 @@ static long maze_dev_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		for ( int i = 0; i < 4; i += 1)
 		{
 			if ( dims.x == valid[ i].x && dims.y == valid[ i].y &&
-				all_mazes[ using].blk[ all_maze_attr[ using].player_pos.x + dims.x][ all_maze_attr[ using].player_pos.y + dims.y] == '.')
+				all_mazes[ using].blk[ all_maze_attr[ using].player_pos.y + dims.y][ all_maze_attr[ using].player_pos.x + dims.x] == '.')
 			{
 				// one of the valid moves
 				all_maze_attr[ using].player_pos.x += dims.x;
