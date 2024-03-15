@@ -211,10 +211,11 @@ static void generate_maze( int location, coord_t dims)
 		all_mazes[ location].sy = ( get_random_u32() % ( dims.y - 2)) + 1;
 	}// if
 	
-
 	all_maze_attr[ location].player_pos = (coord_t){ all_mazes[ location].sx, all_mazes[ location].sy};
 
 	// the real generation
+
+	// blank maze
 	for ( int i = 0; i < all_mazes[ location].h; i += 1)
 	{
 		for ( int j = 0; j < all_mazes[ location].w; j += 1)
@@ -235,6 +236,54 @@ static void generate_maze( int location, coord_t dims)
 			all_mazes[ location].blk[ i][ j] = write;
 		}//for j
 	}// for i
+
+	// adding walls in the inner part
+	for ( int i = 1; i < all_mazes[ location].h - 1; i += 1)
+	{
+		for ( int j = 1; j < all_mazes[ location].w - 1; j += 1)
+		{
+			if ( get_random_u32() % 2)
+			{
+				all_mazes[ location].blk[ i][ j] = '#';
+			}// if
+		}// for j
+	}// for i
+
+	// generate path from start to end
+	coord_t pathing = all_maze_attr[ location].player_pos;
+
+	while ( 1)
+	{
+		all_mazes[ location].blk[ pathing.y][ pathing.x] = '.';
+		if ( pathing.x == all_mazes[ location].ex && pathing.y == all_mazes[ location].ey)
+		{
+			break;
+		}// if
+		else if ( pathing.x == all_mazes[ location].ex)
+		{
+			// only go y
+			pathing.y += all_mazes[ location].ey > pathing.y ? 1 : -1;
+		}// else if
+		else if ( pathing.y == all_mazes[ location].ey)
+		{
+			// only go x
+			pathing.x += all_mazes[ location].ex > pathing.x ? 1 : -1;
+		}// else if
+		else
+		{
+			// either way is fine
+			if ( get_random_u32() % 2)
+			{
+				// only go y
+				pathing.y += all_mazes[ location].ey > pathing.y ? 1 : -1;
+			}// if
+			else
+			{
+				// only go x
+				pathing.x += all_mazes[ location].ex > pathing.x ? 1 : -1;
+			}// else
+		}// else
+	}// while
 
 	return;
 }
