@@ -17,6 +17,7 @@
 #include <linux/device.h>
 #include <linux/cdev.h>
 
+#include <linux/random.h>	// for get_random_u32
 #include "maze.h"			// for maze things
 
 static dev_t devnum;
@@ -196,16 +197,24 @@ static void generate_maze( int location, coord_t dims)
 	all_mazes[ location].w = dims.x;
 	all_mazes[ location].h = dims.y;
 
-	// temp values
-	all_mazes[ location].ex = 2;
-	all_mazes[ location].ey = 3;
-	all_mazes[ location].sx = 3;
-	all_mazes[ location].sy = 3;
+	// no values on boarders allowed
+	all_mazes[ location].ex = ( get_random_u32() % ( dims.x - 2)) + 1;
+	all_mazes[ location].ey = ( get_random_u32() % ( dims.y - 2)) + 1;
+	all_mazes[ location].sx = ( get_random_u32() % ( dims.x - 2)) + 1;
+	all_mazes[ location].sy = ( get_random_u32() % ( dims.y - 2)) + 1;
+
+	if ( all_mazes[ location].ex == all_mazes[ location].sx &&
+		all_mazes[ location].ey == all_mazes[ location].sy)
+	{
+		// if start == end, one more time should do the trick
+		all_mazes[ location].sx = ( get_random_u32() % ( dims.x - 2)) + 1;
+		all_mazes[ location].sy = ( get_random_u32() % ( dims.y - 2)) + 1;
+	}// if
+	
 
 	all_maze_attr[ location].player_pos = (coord_t){ all_mazes[ location].sx, all_mazes[ location].sy};
 
-	// all_mazes[ 0].w = 11;
-	// all_mazes[ 0].h = 7;
+	// the real generation
 	for ( int i = 0; i < all_mazes[ location].h; i += 1)
 	{
 		for ( int j = 0; j < all_mazes[ location].w; j += 1)
