@@ -18,6 +18,7 @@
 #include <linux/cdev.h>
 
 #include <linux/random.h>	// for get_random_u32
+#include <linux/string.h>	// for memset
 #include "maze.h"			// for maze things
 
 static dev_t devnum;
@@ -194,38 +195,23 @@ write_ret:
 // still need work
 static void generate_maze( int location, coord_t dims)
 {
+	// set outer parts
 	all_mazes[ location].w = dims.x;
 	all_mazes[ location].h = dims.y;
 
-	// no values on boarders allowed
-	all_mazes[ location].ex = ( get_random_u32() % ( dims.x - 2)) + 1;
-	all_mazes[ location].ey = ( get_random_u32() % ( dims.y - 2)) + 1;
-	all_mazes[ location].sx = ( get_random_u32() % ( dims.x - 2)) + 1;
-	all_mazes[ location].sy = ( get_random_u32() % ( dims.y - 2)) + 1;
-
-	if ( all_mazes[ location].ex == all_mazes[ location].sx &&
-		all_mazes[ location].ey == all_mazes[ location].sy)
-	{
-		// if start == end, one more time should do the trick
-		all_mazes[ location].sx = ( get_random_u32() % ( dims.x - 2)) + 1;
-		all_mazes[ location].sy = ( get_random_u32() % ( dims.y - 2)) + 1;
-	}// if
-	
-	all_maze_attr[ location].player_pos = (coord_t){ all_mazes[ location].sx, all_mazes[ location].sy};
-
-	// the real generation
-
 	// blank maze
-	for ( int i = 0; i < all_mazes[ location].h; i += 1)
+	int *visited = kzalloc( sizeof(int) * dims.x * dims.y, GFP_KERNEL);
+	char write;
+	for ( int i = 0; i < dims.y; i += 1)
 	{
-		for ( int j = 0; j < all_mazes[ location].w; j += 1)
+		for ( int j = 0; j < dims.x; j += 1)
 		{
-			char write = 0;
-			if ( i == 0 || i == all_mazes[ location].h - 1)
+			if ( i == 0 || j == 0 ||
+				i == dims.y - 1 || j == dims.x - 1)
 			{
 				write = '#';
 			}// if
-			else if ( j == 0 || j == all_mazes[ location].w - 1)
+			else if ( i % 2 == 0 && j % 2 == 0)
 			{
 				write = '#';
 			}// else if
@@ -233,58 +219,103 @@ static void generate_maze( int location, coord_t dims)
 			{
 				write = '.';
 			}// else
+			
 			all_mazes[ location].blk[ i][ j] = write;
-		}//for j
-	}// for i
-
-	// adding walls in the inner part
-	for ( int i = 1; i < all_mazes[ location].h - 1; i += 1)
-	{
-		for ( int j = 1; j < all_mazes[ location].w - 1; j += 1)
-		{
-			if ( get_random_u32() % 2)
+			if ( write == '#')
 			{
-				all_mazes[ location].blk[ i][ j] = '#';
+				visited[ dims.x * i + j] = 1;
 			}// if
 		}// for j
 	}// for i
-
-	// generate path from start to end
-	coord_t pathing = all_maze_attr[ location].player_pos;
-
-	while ( 1)
+	
+	// the real generation
+	coord_t start = (coord_t){ 1, 1};
+	coord_t direction[ 4] = { (coord_t){ 1, 0}, (coord_t){ 0, 1}, (coord_t){ -1, 0}, (coord_t){ 0, -1}};
+	coord_t *stack = kzalloc( sizeof(coord_t) * dims.x * dims.y, GFP_KERNEL);
+	int stack_top = 0;
+	stack[ stack_top] = start;
+	// stack_top += 1;
+	// visited[ dims.x * start.y + start.x] = 1;
+	coord_t temp;
+	while ( stack_top != -1)
 	{
-		all_mazes[ location].blk[ pathing.y][ pathing.x] = '.';
-		if ( pathing.x == all_mazes[ location].ex && pathing.y == all_mazes[ location].ey)
+		// pop the stack
+		temp = stack[ stack_top];
+		stack_top -= 1;
+
+		// printk( KERN_INFO "before: (%d,%d) %d\n", temp.x, temp.y, stack_top);
+		// check if visited
+		if ( visited[ temp.y * dims.x + temp.x] == 1)
 		{
-			break;
+			all_mazes[ location].blk[ temp.y][ temp.x] = '#';
+			// printk( KERN_INFO "skip: (%d,%d) %d\n", temp.x, temp.y, visited[ temp.y * dims.x + temp.x]);
+			continue;
 		}// if
-		else if ( pathing.x == all_mazes[ location].ex)
+		all_mazes[ location].blk[ temp.y][ temp.x] = '.';
+		visited[ temp.y * dims.x + temp.x] = 1;
+
+		// random add neighbors
+		// shuffle direction
+		int targets[ 2];
+		for ( int i = 0; i < 4; i += 1)
 		{
-			// only go y
-			pathing.y += all_mazes[ location].ey > pathing.y ? 1 : -1;
-		}// else if
-		else if ( pathing.y == all_mazes[ location].ey)
+			targets[ 0] = get_random_u32() % 4;
+			targets[ 1] = get_random_u32() % 4;
+			start = direction[ targets[ 0]];
+			direction[ targets[ 0]] = direction[ targets[ 1]];
+			direction[ targets[ 1]] = start;
+		}// for i
+		
+		int deadend = 4;
+		// add all to stack
+		for ( int i = 0; i < 4; i += 1)
 		{
-			// only go x
-			pathing.x += all_mazes[ location].ex > pathing.x ? 1 : -1;
-		}// else if
-		else
-		{
-			// either way is fine
-			if ( get_random_u32() % 2)
+			if ( visited[( temp.y + direction[ i].y) * dims.x + temp.x + direction[ i].x] == 0)
 			{
-				// only go y
-				pathing.y += all_mazes[ location].ey > pathing.y ? 1 : -1;
+				// add only not visited
+				stack_top += 1;
+				stack[ stack_top] = (coord_t){ temp.x + direction[ i].x, temp.y + direction[ i].y};
 			}// if
 			else
 			{
-				// only go x
-				pathing.x += all_mazes[ location].ex > pathing.x ? 1 : -1;
+				deadend -= 1;
 			}// else
-		}// else
+		}// for i
+		
+		if ( deadend == 0 && dims.y != 3)
+		{
+			all_mazes[ location].blk[ temp.y][ temp.x] = '#';
+		}// if
+		
+		// printk( KERN_INFO "%d\n", stack_top);
 	}// while
+	kfree( stack);
+	stack = NULL;
+	kfree( visited);
+	visited = NULL;
 
+	// set start and end point
+	// no values on boarders allowed
+	temp = (coord_t){ 0, 0};
+	while ( all_mazes[ location].blk[ temp.y][ temp.x] == '#')
+	{
+		temp.x = get_random_u32() % dims.x;
+		temp.y = get_random_u32() % dims.y;
+	}// while
+	all_mazes[ location].ex = temp.x;
+	all_mazes[ location].ey = temp.y;
+
+	temp = (coord_t){ 0, 0};
+	while ( all_mazes[ location].blk[ temp.y][ temp.x] == '#' ||
+			( temp.x == all_mazes[ location].ex && temp.y == all_mazes[ location].ey))
+	{
+		temp.x = get_random_u32() % dims.x;
+		temp.y = get_random_u32() % dims.y;
+	}// while
+	all_mazes[ location].sx = temp.x;
+	all_mazes[ location].sy = temp.y;
+	
+	all_maze_attr[ location].player_pos = (coord_t){ all_mazes[ location].sx, all_mazes[ location].sy};
 	return;
 }
 
