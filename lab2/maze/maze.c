@@ -199,9 +199,36 @@ static void generate_maze( int location, coord_t dims)
 	all_mazes[ location].w = dims.x;
 	all_mazes[ location].h = dims.y;
 
+	// special case if only one path
+	char write;
+	if ( dims.x == 3 || dims.y == 3)
+	{
+		for ( int i = 0; i < dims.y; i += 1)
+		{
+			for ( int j = 0; j < dims.x; j += 1)
+			{
+				if ( i == 0 || j == 0 ||
+					i == dims.y - 1 || j == dims.x - 1)
+				{
+					write = '#';
+				}// if
+				else if ( i % 2 == 0 && j % 2 == 0)
+				{
+					write = '#';
+				}// else if
+				else
+				{
+					write = '.';
+				}// else
+				
+				all_mazes[ location].blk[ i][ j] = write;
+			}// for j
+		}// for i
+		goto locations;
+	}// if
+
 	// blank maze
 	int *visited = kzalloc( sizeof(int) * dims.x * dims.y, GFP_KERNEL);
-	char write;
 	for ( int i = 0; i < dims.y; i += 1)
 	{
 		for ( int j = 0; j < dims.x; j += 1)
@@ -282,7 +309,7 @@ static void generate_maze( int location, coord_t dims)
 			}// else
 		}// for i
 		
-		if ( deadend == 0 && dims.y != 3)
+		if ( deadend == 0)
 		{
 			all_mazes[ location].blk[ temp.y][ temp.x] = '#';
 		}// if
@@ -294,6 +321,7 @@ static void generate_maze( int location, coord_t dims)
 	kfree( visited);
 	visited = NULL;
 
+locations:
 	// set start and end point
 	// no values on boarders allowed
 	temp = (coord_t){ 0, 0};
@@ -569,19 +597,19 @@ static int maze_proc_read(struct seq_file *m, void *v) {
 				{
 					// end point is on this line
 					int offset = strlen("- %03d: ");
-					buf[ offset + all_mazes[ i].ex] = 'E';
+					buf[ offset + all_mazes[ i].ex - 1] = 'E';
 				}// if
 				if ( all_mazes[ i].sy == j)
 				{
 					// start point is on this line
 					int offset = strlen("- %03d: ");
-					buf[ offset + all_mazes[ i].sx] = 'S';
+					buf[ offset + all_mazes[ i].sx - 1] = 'S';
 				}// if
 				if ( all_maze_attr[ i].player_pos.y == j)
 				{
 					// player point is on this line
 					int offset = strlen("- %03d: ");
-					buf[ offset + all_maze_attr[ i].player_pos.x] = '*';
+					buf[ offset + all_maze_attr[ i].player_pos.x - 1] = '*';
 				}// if
 				
 				strncat( buf, "\n", sizeof(char));
