@@ -2,11 +2,10 @@
 obj-m     += maze.o
 ccflags-y += -DEXPORT_SYMTAB
 
-all: hello
-	make -C ../dist/modulebuild M=$(PWD) modules
+all: maze.ko
 
-hello: hello.c
-	$(CROSS_COMPILE)gcc -o $@ $< -Wall -static
+maze.ko: maze.c
+	make -C ../dist/modulebuild M=$(PWD) modules
 
 clean:
 	rm -f hello
@@ -14,4 +13,4 @@ clean:
 
 install: all
 	mkdir -p ../rootfs/modules
-	cp hello mazetest maze.ko ../rootfs/modules
+	cp mazetest maze.ko ../rootfs/modules
