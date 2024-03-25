@@ -1,4 +1,4 @@
-.PHONY: all clean
+.PHONY: all clean run
 
 CC = gcc
 CFLAGS = -Wall -g
@@ -11,8 +11,10 @@ LIB = libmaze_dummy.c
 LIBFLAGS = -Wall -shared -fPIC
 LIBTARGET = libmaze.so
 
+PRELOAD_LIB = libsolver.c
+PRELOAD_LIBTARGET = libsolver.so
 
-all: $(LIBTARGET) $(TARGET)
+all: $(LIBTARGET) $(TARGET) $(PRELOAD_LIBTARGET)
 
 $(TARGET): $(SOURCE) $(LIBTARGET)
 	$(CC) $(CFLAGS) -o $@ $< $(SHARED_LIB)
@@ -20,5 +22,12 @@ $(TARGET): $(SOURCE) $(LIBTARGET)
 $(LIBTARGET): $(LIB)
 	$(CC) $(LIBFLAGS) -o $@ $^
 
+$(PRELOAD_LIBTARGET): $(PRELOAD_LIB)
+# 	remember to link for dlopen
+	$(CC) $(LIBFLAGS) -ldl -o $@ $^
+
+run: all
+	LD_PRELOAD=./libsolver.so ./maze
+
 clean:
-	rm -f $(TARGET) $(LIBTARGET)
+	rm -f $(TARGET) $(LIBTARGET) $(PRELOAD_LIBTARGET)
