@@ -1,18 +1,12 @@
 #include <stdio.h>
 #include "libmaze.h"
 
-static void *stored_ptr;
+// static void *stored_ptr;
 
-void maze_set_ptr(void *ptr)
+int maze_init()
 {
-    stored_ptr = ptr;
+	fprintf(stderr, "MAZE: library init - stored pointer = %p.\n", maze_get_ptr());
     printf("UP112_GOT_MAZE_CHALLENGE\n");
+    printf("SOLVER: _main = %p\n", maze_get_ptr());
+    return 0;
 }
-
-// void move_1(maze_t *mz)
-// {
-//     printf("SOLVER move1: %p\n", stored_ptr);
-//     mz->cx = mz->ex;
-//     mz->cy = mz->ey - 1;
-//     move_down( mz);
-// }
