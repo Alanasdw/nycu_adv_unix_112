@@ -46,27 +46,32 @@ static void find_path( s_pos path[], int *path_len, const maze_t *mz)
     {
         for ( int j = 0; j < mz -> w; j += 1)
         {
-            visited[ i][ j] = 0;
+            visited[ i][ j] = -1;
         }// for j
     }// for i
 
-    s_pos stack[ PATH_MAX + 10];
+    typedef struct
+    {
+        s_pos pos;
+        int depth;
+    } s_step;
+
+    s_step stack[ PATH_MAX + 10];
     int stack_top = -1;
 
     // try to use DFS to walk the maze
     stack_top += 1;
-    stack[ stack_top] = (s_pos){ mz -> cx, mz -> cy};
-    s_pos current;
+    stack[ stack_top] = (s_step){(s_pos){ mz -> cx, mz -> cy}, 0};
+    s_step current;
     while ( stack_top >= 0)
     {
         current = stack[ stack_top];
         stack_top -= 1;
 
-        path[ *path_len] = current;
-        *path_len += 1;
-        visited[ current.y][ current.x] = 1;
+        path[ current.depth] = current.pos;
+        visited[ current.pos.y][ current.pos.x] = 1;
 
-        if ( current.x == mz -> ex && current.y == mz -> ey)
+        if ( current.pos.x == mz -> ex && current.pos.y == mz -> ey)
         {
             // ended
             break;
@@ -75,16 +80,17 @@ static void find_path( s_pos path[], int *path_len, const maze_t *mz)
         int flag = 0;
         for ( int i = 0; i < DIR_COUNT; i += 1)
         {
-            if ( mz -> blk[ current.y + offset[ i].y][ current.x + offset[ i].x] == 0 &&
-             visited[ current.y + offset[ i].y][ current.x + offset[ i].x] == 0)
+            if ( mz -> blk[ current.pos.y + offset[ i].y][ current.pos.x + offset[ i].x] == 0 &&
+             visited[ current.pos.y + offset[ i].y][ current.pos.x + offset[ i].x] == -1)
             {
                 // possible path, add to stack
                 stack_top += 1;
-                stack[ stack_top] = (s_pos){ current.x + offset[ i].x, current.y + offset[ i].y};
+                stack[ stack_top] = (s_step){(s_pos){ current.pos.x + offset[ i].x, current.pos.y + offset[ i].y}, current.depth + 1};
                 flag += 1;
             }// if
         }// for i
     }// while
+    *path_len = stack[ stack_top].depth + 1;
 
     return;
 }
@@ -106,7 +112,7 @@ void move_1(maze_t *mz)
     printf("path len: %d\n", path_len);
 
     void (* dir[ 4])(maze_t *mz) = { move_up, move_down, move_left, move_right};
-    int next_step[ PATH_MAX + 10];
+    // construct path with moves
     for ( int i = 1; i < path_len; i += 1)
     {
         // try to match the directions
@@ -115,21 +121,11 @@ void move_1(maze_t *mz)
             if ( path[ i - 1].x + offset[ j].x == path[ i].x &&
                 path[ i - 1].y + offset[ j].y == path[ i].y)
             {
-                next_step[ i - 1] = j;
-                printf("%d \n", next_step[ i - 1]);
                 dir[ j]( mz);
-                printf("c pos: %d %d\n", mz ->cx, mz->cy);
                 break;
             }// if
         }// for j
     }// for i
-    printf("\n");
-    printf("c pos: %d %d\n", mz ->cx, mz->cy);
-    // construct path with moves
-    // for ( int i = 0; i < path_len; i += 1)
-    // {
-        
-    // }// for i
     
     return;
 }
