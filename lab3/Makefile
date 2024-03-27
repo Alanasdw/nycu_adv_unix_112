@@ -23,8 +23,8 @@ $(LIBTARGET): $(LIB)
 	$(CC) $(LIBFLAGS) -o $@ $^
 
 $(PRELOAD_LIBTARGET): $(PRELOAD_LIB)
-# 	remember to link for dlopen
-	$(CC) $(LIBFLAGS) -ldl -o $@ $^
+# 	remember to link for dlopen, mprotect
+	$(CC) $(LIBFLAGS) -g -ldl -lc -o $@ $^
 
 run: all
 	LD_PRELOAD=./libsolver.so ./maze
