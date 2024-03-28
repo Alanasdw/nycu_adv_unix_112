@@ -141,6 +141,12 @@ maze_t *maze_load(const char *fn)
         }// if
     }// if
 
+    /* kind of cheating
+    ret_val -> cx = ret_val -> ex;
+    ret_val -> cy = ret_val -> ey;
+    return ret_val;
+    // */
+
     maze_t *mz = ret_val;
     int path[ PATH_MAX + 10];
     int path_len = 0;
