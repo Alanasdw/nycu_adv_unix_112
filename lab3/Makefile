@@ -2,7 +2,8 @@
 
 CC = gcc
 CFLAGS = -Wall -g
-SHARED_LIB = -lmaze -L. -Wl,-rpath,$(shell pwd)
+SHARED_LIB = -lmaze -L.
+#  -Wl,-rpath,$(shell pwd)
 
 SOURCE = maze.c
 TARGET = maze
@@ -22,12 +23,12 @@ $(TARGET): $(SOURCE) $(LIBTARGET)
 $(LIBTARGET): $(LIB)
 	$(CC) $(LIBFLAGS) -o $@ $^
 
-$(PRELOAD_LIBTARGET): $(PRELOAD_LIB)
+$(PRELOAD_LIBTARGET): $(PRELOAD_LIB) $(LIBTARGET)
 # 	remember to link for dlopen, mprotect
-	$(CC) $(LIBFLAGS) -g -ldl -lc -o $@ $^
+	$(CC) $(LIBFLAGS) -g -ldl -lc -o $@ $^ $(LIBTARGET)
 
 run: all
-	LD_PRELOAD=./libsolver.so ./maze
+	LD_LIBRARY_PATH=. LD_PRELOAD=./libsolver.so ./maze
 
 clean:
 	rm -f $(TARGET) $(LIBTARGET) $(PRELOAD_LIBTARGET)
