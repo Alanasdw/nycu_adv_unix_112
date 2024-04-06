@@ -8,7 +8,7 @@ TARGET = logger
 
 LIBFLAGS = -Wall -shared -fPIC
 PRELOAD_LIB = libinject.c
-PRELOAD_LIBTARGET = libinject.so
+PRELOAD_LIBTARGET = logger.so
 
 all: $(TARGET) $(PRELOAD_LIBTARGET)
 
