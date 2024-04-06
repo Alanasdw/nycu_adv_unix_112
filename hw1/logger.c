@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/wait.h>
 
 extern char *optarg;
 extern int optind, opterr, optopt;
@@ -109,12 +110,13 @@ exit:
 
 int main( int argc, char *argv[])
 {
-    // printf("argc: %d\n", argc);
-
-    // for ( int i = 0; i < argc; i += 1)
-    // {
-    //     printf("%s\n", argv[ i]);
-    // }// for i
+    /*
+    printf("argc: %d\n", argc);
+    for ( int i = 0; i < argc; i += 1)
+    {
+        printf("%s\n", argv[ i]);
+    }// for i
+    // */
     
     int status = 0;
     status = parse_args( argc, argv);
@@ -123,7 +125,30 @@ int main( int argc, char *argv[])
         goto exit;
     }// if
 
-
+    pid_t pid = fork();
+    switch ( pid)
+    {
+    case -1:
+        perror("fork:");
+        status = 1;
+        goto exit;
+        break;
+    case 0:
+        printf("child\n");
+        // could install a signal handler to get start signal from parent
+        break;
+    
+    default:
+        printf("child pid is %d\n", pid);
+        // maybe use signal to start child and start the printing parent
+        // the main checks will be in the library
+        while ( wait(NULL) == pid)
+        {
+            // could do stuff while waiting??
+        }// while
+        printf("parent process\n");
+        break;
+    }// switch
 
 exit:
     return status;
