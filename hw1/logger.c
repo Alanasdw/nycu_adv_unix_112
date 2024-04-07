@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -125,7 +126,16 @@ int main( int argc, char *argv[])
         goto exit;
     }// if
 
+    int child2parent[ 2] = { 0};
+    if ( pipe( child2parent))
+    {
+        perror("pipe child2parent error:");
+        status = 1;
+        goto exit;
+    }// if
+
     pid_t pid = fork();
+    char buf[ 256] = { 0};
     switch ( pid)
     {
     case -1:
@@ -134,22 +144,55 @@ int main( int argc, char *argv[])
         goto exit;
         break;
     case 0:
-        printf("child\n");
-        // could install a signal handler to get start signal from parent
+        // could install a signal handler to get start signal from parent?
+        // close read port
+        close( child2parent[ 0]);
+
+        // change the stdout before execvp
+        dup2( child2parent[ 1], STDOUT_FILENO);
+        close( child2parent[ 1]);
+
+        // create sopath
+        int sopath_len = strlen( "LD_PRELOAD=") + strlen( args.shared_lib);
+        char *sopath = calloc( sopath_len, sizeof(char));
+        strcat( sopath, "LD_PRELOAD=");
+        strcat( sopath, args.shared_lib);
+
+        char *const envp[] = { sopath, NULL};
+        execve( argv[ args.commands], &argv[ args.commands], envp);
+        printf("child execve error\n");
+        status = 1;
         break;
     
     default:
-        printf("child pid is %d\n", pid);
+        // close write port
+        close( child2parent[ 1]);
+
         // maybe use signal to start child and start the printing parent
-        // the main checks will be in the library
-        while ( wait(NULL) == pid)
+        // // the main checks will be in the library
+        // while ( wait(NULL) == pid)
+        // {
+        //     // could do stuff while waiting??
+        // }// while
+        while ( read( child2parent[ 0], buf, 256))
         {
-            // could do stuff while waiting??
+            printf("%s", buf);
+            memset( buf, 0, sizeof( buf));
         }// while
-        printf("parent process\n");
+        printf("parent process end\n");
         break;
     }// switch
 
 exit:
+    // close unused pipes
+    for ( int i = 0; i < 2; i += 1)
+    {
+        if ( child2parent[ i])
+        {
+            close( child2parent[ i]);
+            child2parent[ i] = 0;
+        }// if
+    }// for i
+
     return status;
 }
