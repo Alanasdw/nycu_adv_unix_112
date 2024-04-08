@@ -89,8 +89,9 @@ int parse_args( int argc, char *argv[])
         status = 1;
         goto exit;
     }// if
-    if ( args.output_file && access( args.output_file, R_OK | W_OK))
+    if ( args.output_file && !access( args.output_file, F_OK) && access( args.output_file, R_OK | W_OK))
     {
+        // has designated an output file name & file exists & does not have rw access
         fprintf( stderr, "error: %s permission error\n", args.output_file);
         status = 1;
         goto exit;
@@ -149,7 +150,7 @@ int main( int argc, char *argv[])
         close( child2parent[ 0]);
 
         // change the stdout before execvp
-        dup2( child2parent[ 1], STDOUT_FILENO);
+        dup2( child2parent[ 1], STDERR_FILENO);
         close( child2parent[ 1]);
 
         // create sopath
@@ -160,7 +161,7 @@ int main( int argc, char *argv[])
 
         char *const envp[] = { sopath, NULL};
         execve( argv[ args.commands], &argv[ args.commands], envp);
-        printf("child execve error\n");
+        perror("child execve error\n");
         status = 1;
         break;
     
@@ -168,18 +169,22 @@ int main( int argc, char *argv[])
         // close write port
         close( child2parent[ 1]);
 
-        // maybe use signal to start child and start the printing parent
-        // // the main checks will be in the library
-        // while ( wait(NULL) == pid)
-        // {
-        //     // could do stuff while waiting??
-        // }// while
-        while ( read( child2parent[ 0], buf, 256))
+        FILE *stream_out = stderr;
+        if ( args.output_file)
         {
-            printf("%s", buf);
+            stream_out = fopen( args.output_file, "w+");
+        }// if
+        while ( read( child2parent[ 0], buf, 256) > 0)
+        {
+            fprintf( stream_out, "%s", buf);
             memset( buf, 0, sizeof( buf));
         }// while
-        printf("parent process end\n");
+        if ( args.output_file)
+        {
+            fflush( stream_out);
+            fclose( stream_out);
+            stream_out = NULL;
+        }// if
         break;
     }// switch
 
