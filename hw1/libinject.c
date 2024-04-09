@@ -3,6 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <netdb.h>
 #include <regex.h>
 
 #define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof((arr)[0]))
@@ -112,6 +117,77 @@ void free_blacklist()
     return;
 }
 
+int is_match( int blacklist_type, const char *restrict target)
+{
+    // use regcomp, regexec, regfree to match pattern
+    int match = REG_NOMATCH;
+    regex_t preg;
+    regmatch_t match_info[1];
+    for ( int i = 0; i < blacklist[ blacklist_type].len; i += 1)
+    {
+        // printf("before regcomp\n");
+        if ( regcomp( &preg, blacklist[ blacklist_type].list[ i], REG_NEWLINE))
+        {
+            printf("regex compile error on %s\n", blacklist[ blacklist_type].list[ i]);
+            exit( 1);
+        }// if
+        // printf("before regexec\n");
+        match = regexec( &preg, target, ARRAY_SIZE( match_info), match_info, 0);
+        regfree( &preg);
+        if ( match == 0)
+        {
+            // matched in blacklist
+            errno = EACCES;
+            break;
+        }// if
+    }// for i
+    return match != REG_NOMATCH;
+}
+
+int abs_path( const char *restrict pathname, char **resolved_name)
+{
+    // [ -1, 0, 1] = [ error, is symlink, not symlink]
+    int retval = 0;
+
+    struct stat sb;
+    if ( lstat( pathname, &sb) == -1)
+    {
+        perror("lstat failed");
+        retval = -1;
+        goto exit;
+    }// if
+
+    char *temp = malloc( sizeof(char) * ( sb.st_size + 1));
+    if ( temp == NULL)
+    {
+        perror("malloc failed");
+        retval = -1;
+        goto exit;
+    }// if
+    if ( readlink( pathname, temp, sb.st_size + 1) == -1)
+    {
+        if ( errno != EINVAL)
+        {
+            perror("readlink failed");
+            retval = -1;
+        }// if
+        else
+        {
+            // is a normal path
+            retval = 1;
+            free( temp);
+            temp = NULL;
+        }// else
+        goto exit;
+    }// if
+    temp[ sb.st_size] = '\0';
+
+    *resolved_name = temp;
+
+exit:
+    return retval;
+}
+
 FILE *fopen( const char *restrict pathname, const char *restrict mode)
 {
     // check the if parsed the file
@@ -121,31 +197,33 @@ FILE *fopen( const char *restrict pathname, const char *restrict mode)
         atexit( free_blacklist);
     }// if
 
-    // use regcomp, regexec, regfree to match pattern
-    int match = REG_NOMATCH;
-    regex_t preg;
-    regmatch_t match_info[1];
-    for ( int i = 0; i < blacklist[ OPEN].len; i += 1)
-    {
-        if ( regcomp( &preg, blacklist[ OPEN].list[ i], REG_NEWLINE))
-        {
-            printf("regex compile error on %s\n", blacklist[ OPEN].list[ i]);
-            exit( 1);
-        }// if
-        match = regexec( &preg, pathname, ARRAY_SIZE( match_info), match_info, 0);
-        regfree( &preg);
-        if ( match == 0)
-        {
-            // matched in blacklist
-            errno = EACCES;
-            break;
-        }// if
-    }// for i
-
     FILE *retval = NULL;
-    // not in blacklist
-    if ( errno != EACCES)
+    // create absolute pathname with readlink
+    char *resolved_name = NULL;
+    switch ( abs_path( pathname, &resolved_name))
     {
+    case -1:
+        goto exit;
+        break;
+    case 0:
+        // is symlink
+        // printf("%s symlink to %s\n", pathname, resolved_name);
+        break;
+    case 1:
+        // not symlink path
+        // printf("not symlink\n");
+        resolved_name = (char *)pathname;
+        break;
+    
+    default:
+        break;
+    }// switch abs_path
+
+    // printf("before ismatch %s\n", resolved_name);
+    // not in blacklist
+    if ( !is_match( OPEN, resolved_name))
+    {
+        // printf("not in blacklist\n");
         FILE *(* old_fopen)( const char *, const char *) = NULL;
         void *handle = dlopen("libc.so.6", RTLD_LAZY);
         if ( handle)
@@ -157,18 +235,79 @@ FILE *fopen( const char *restrict pathname, const char *restrict mode)
         }// if
     }// if
 
+exit:
+    if ( resolved_name && resolved_name != pathname)
+    {
+        free( resolved_name);
+    }// if
+    resolved_name = NULL;
+
     fflush( stderr);
-    fprintf( stderr, "[logger] fopen(\"%s\", \"%s\") = ", pathname, mode);
     if ( !retval)
     {
-        fprintf( stderr, "0x0\n");
+        fprintf( stderr, "[logger] fopen(\"%s\", \"%s\") = 0x0\n", pathname, mode);
     }// if
     else
     {
-        fprintf( stderr, "%p\n", retval);
+        fprintf( stderr, "[logger] fopen(\"%s\", \"%s\") = %p\n", pathname, mode, retval);
     }// else
     fflush( stderr);
 
     return retval;
 }
 
+size_t fread(void *ptr, size_t size, size_t nmemb, FILE *restrict stream)
+{
+    // check the if parsed the file
+    if ( !parsed)
+    {
+        parse_conf();
+        atexit( free_blacklist);
+    }// if
+    printf("my fread called\n");
+    return 0;
+}
+size_t fwrite(const void *ptr,size_t size, size_t nmemb, FILE *restrict stream)
+{
+    // check the if parsed the file
+    if ( !parsed)
+    {
+        parse_conf();
+        atexit( free_blacklist);
+    }// if
+    printf("my fwrite callled\n");
+    return 0;
+}
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
+{
+    // check the if parsed the file
+    if ( !parsed)
+    {
+        parse_conf();
+        atexit( free_blacklist);
+    }// if
+    printf("my connect called\n");
+    return 0;
+}
+int getaddrinfo(const char *restrict node, const char *restrict service, const struct addrinfo *restrict hints, struct addrinfo **restrict res)
+{
+    // check the if parsed the file
+    if ( !parsed)
+    {
+        parse_conf();
+        atexit( free_blacklist);
+    }// if
+    printf("my getaddrinfo called\n");
+    return 0;
+}
+int system( const char *command)
+{
+    // check the if parsed the file
+    if ( !parsed)
+    {
+        parse_conf();
+        atexit( free_blacklist);
+    }// if
+    printf("my system called\n");;
+    return 0;
+}
