@@ -10,7 +10,9 @@
 #include <netdb.h>
 #include <regex.h>
 
+#include "comms.h"
 #define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof((arr)[0]))
+#define MAX_BUF_SIZE (256)
 
 typedef struct _slist
 {
@@ -28,10 +30,33 @@ enum e_type
     MAX_TYPE_COUNT
 };
 
+typedef struct _sfile_attr
+{
+    char *name;
+    FILE *fptr;
+} s_file_attr;
+
 extern int errno;
 static int parsed = 0;
 static s_list blacklist[ MAX_TYPE_COUNT] = { 0};
 static const char *type_name[] = { "open", "read", "write", "connect", "getaddrinfo"};
+// static s_file_attr *all_files = NULL;
+// static int all_file_len = 0;
+
+void free_blacklist()
+{
+    for ( int i = 0; i < MAX_TYPE_COUNT; i += 1)
+    {
+        for ( int j = 0; j < blacklist[ i].len; j += 1)
+        {
+            free( blacklist[ i].list[ j]);
+            blacklist[ i].list[ j] = NULL;
+        }// for j
+        blacklist[ i].len = 0;
+    }// for i
+    
+    return;
+}
 
 static void parse_conf()
 {
@@ -99,21 +124,7 @@ static void parse_conf()
 
     fclose( conf);
     conf = NULL;
-    return;
-}
-
-void free_blacklist()
-{
-    for ( int i = 0; i < MAX_TYPE_COUNT; i += 1)
-    {
-        for ( int j = 0; j < blacklist[ i].len; j += 1)
-        {
-            free( blacklist[ i].list[ j]);
-            blacklist[ i].list[ j] = NULL;
-        }// for j
-        blacklist[ i].len = 0;
-    }// for i
-    
+    atexit( free_blacklist);
     return;
 }
 
@@ -164,7 +175,8 @@ int abs_path( const char *restrict pathname, char **resolved_name)
         retval = -1;
         goto exit;
     }// if
-    if ( readlink( pathname, temp, sb.st_size + 1) == -1)
+    int read_len = readlink( pathname, temp, sb.st_size + 1);
+    if ( read_len == -1)
     {
         if ( errno != EINVAL)
         {
@@ -180,7 +192,7 @@ int abs_path( const char *restrict pathname, char **resolved_name)
         }// else
         goto exit;
     }// if
-    temp[ sb.st_size] = '\0';
+    temp[ read_len] = '\0';
 
     *resolved_name = temp;
 
@@ -194,7 +206,6 @@ FILE *fopen( const char *restrict pathname, const char *restrict mode)
     if ( !parsed)
     {
         parse_conf();
-        atexit( free_blacklist);
     }// if
 
     FILE *retval = NULL;
@@ -245,13 +256,89 @@ exit:
     fflush( stderr);
     if ( !retval)
     {
-        fprintf( stderr, "[logger] fopen(\"%s\", \"%s\") = 0x0\n", pathname, mode);
+        // fprintf( stderr, "[logger] fopen(\"%s\", \"%s\") = 0x0\n", pathname, mode);
+        char buf[ MAX_BUF_SIZE] = { 0};
+        snprintf( buf, MAX_BUF_SIZE - 1, "[logger] fopen(\"%s\", \"%s\") = %p\n", pathname, mode, retval);
+        write( comms_fd, buf, strlen( buf));
     }// if
     else
     {
-        fprintf( stderr, "[logger] fopen(\"%s\", \"%s\") = %p\n", pathname, mode, retval);
+        // fprintf( stderr, "[logger] fopen(\"%s\", \"%s\") = %p\n", pathname, mode, retval);
+        char buf[ MAX_BUF_SIZE] = { 0};
+        snprintf( buf, MAX_BUF_SIZE - 1, "[logger] fopen(\"%s\", \"%s\") = %p\n", pathname, mode, retval);
+        write( comms_fd, buf, strlen( buf));
     }// else
     fflush( stderr);
+
+    return retval;
+}
+
+int log2file( const char *filename, const char *data, size_t size, size_t nmemb)
+{
+    // [ 0, 1] = [ success, error]
+    int retval = 0;
+    void *handle = dlopen("libc.so.6", RTLD_LAZY);
+    if ( !handle)
+    {
+        printf("dlopen error on log2file\n");
+        retval = 1;
+        goto exit;
+    }// if
+
+    FILE *file = NULL;
+    FILE *(* old_fopen)( const char *, const char *) = NULL;
+    old_fopen = dlsym( handle, "fopen");
+    file = old_fopen( filename, "a+");
+    if ( !file)
+    {
+        printf("fopen failed: %s\n", filename);
+    }// if
+
+    FILE *(* old_fwrite)( const void *, size_t, size_t, FILE *) = NULL;
+    old_fwrite = dlsym( handle, "fwrite");
+    old_fwrite( data, size, nmemb, file);
+
+
+    FILE *(* old_fclose)( FILE *) = NULL;
+    old_fclose = dlsym( handle, "fclose");
+    old_fclose( file);
+    file = NULL;
+
+    dlclose( handle);
+    handle = NULL;
+
+exit:
+    return retval;
+}
+
+int get_output_name( char **output_name, FILE *stream, enum e_type mode)
+{
+    int retval = 0;
+    *output_name = calloc( FILENAME_MAX, sizeof(char));
+
+    // find filename from FILE *
+    char *filename = NULL;
+    char *pathname = calloc( FILENAME_MAX, sizeof(char));
+    snprintf( pathname, FILENAME_MAX, "/proc/self/fd/%d", fileno( stream));
+    if ( abs_path( pathname, &filename) == -1)
+    {
+        // error in abs_path
+        retval = 1;
+        goto exit;
+    }// if
+    // printf(">>in get output name: [%s]\n", pathname);
+    // printf(">in get output name: [%s]\n", filename);
+    snprintf( *output_name, FILENAME_MAX, "{%d}-{%s}-%s.log", getpid(), filename, type_name[ mode]);
+    
+exit:
+    free( pathname);
+    pathname = NULL;
+
+    if ( filename && filename != pathname)
+    {
+        free( filename);
+    }// if
+    filename = NULL;
 
     return retval;
 }
@@ -262,51 +349,132 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *restrict stream)
     if ( !parsed)
     {
         parse_conf();
-        atexit( free_blacklist);
     }// if
-    printf("my fread called\n");
-    return 0;
+
+    size_t retval = 0;
+    size_t (* old_fread)( void *, size_t, size_t, FILE *) = NULL;
+    void *handle = dlopen("libc.so.6", RTLD_LAZY);
+    if ( handle)
+    {
+        old_fread = dlsym( handle, "fread");
+        retval = old_fread( ptr, size, nmemb, stream);
+        dlclose( handle);
+        handle = NULL;
+    }// if
+
+    // find out filename
+    char *filename = NULL;
+    if ( get_output_name( &filename, stream, READ))
+    {
+        printf("get_output_name failed\n");
+        retval = -1;
+        goto exit;
+    }// if
+    printf("logger: [%s]\n", filename);
+    // check fread contents
+    if ( retval)
+    {
+        // log file write
+        if ( log2file( filename, ptr, sizeof(char), retval))
+        {
+            printf("error in log2file\n");
+            goto exit;
+        }// if
+        
+        // has content held in ptr
+        // fprintf( stderr, "[logger] fread(%p, %ld, %ld, %p) = %ld\n", ptr, size, nmemb, stream, retval);
+        // need to reconstruct according to write()
+
+    }// if
+
+exit:
+    free( filename);
+    filename = NULL;
+
+    return retval;
 }
+
 size_t fwrite(const void *ptr,size_t size, size_t nmemb, FILE *restrict stream)
 {
     // check the if parsed the file
     if ( !parsed)
     {
         parse_conf();
-        atexit( free_blacklist);
     }// if
-    printf("my fwrite callled\n");
-    return 0;
+
+    size_t retval = 0;
+    size_t (* old_fwrite)( const void *, size_t, size_t, FILE *) = NULL;
+    void *handle = dlopen("libc.so.6", RTLD_LAZY);
+    if ( handle)
+    {
+        old_fwrite = dlsym( handle, "fwrite");
+        retval = old_fwrite( ptr, size, nmemb, stream);
+        dlclose( handle);
+        handle = NULL;
+    }// if
+
+    // find out filename
+    char *filename = NULL;
+    if ( get_output_name( &filename, stream, WRITE))
+    {
+        printf("get_output_name failed\n");
+        retval = -1;
+        goto exit;
+    }// if
+    printf("logger write: [%s]\n", filename);
+    // check fread contents
+    if ( retval)
+    {
+        // log file write
+        printf("testing name as {kek_write.log} %ld\n", retval);
+        // if ( log2file( filename, ptr, sizeof(char), retval))
+        if ( log2file( "kek_write.log", ptr, sizeof(char), retval))
+        {
+            printf("error in log2file\n");
+            goto exit;
+        }// if
+        
+        // has content held in ptr
+        // fprintf( stderr, "[logger] fwrite(\"%s\", %ld, %ld, %p) = %ld\n", (char *)ptr, size, nmemb, stream, retval);
+        // need to reconstruct according to write()
+
+    }// if
+
+exit:
+    free( filename);
+    filename = NULL;
+
+    return retval;
 }
+
 int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
     // check the if parsed the file
     if ( !parsed)
     {
         parse_conf();
-        atexit( free_blacklist);
     }// if
     printf("my connect called\n");
     return 0;
 }
+
 int getaddrinfo(const char *restrict node, const char *restrict service, const struct addrinfo *restrict hints, struct addrinfo **restrict res)
 {
     // check the if parsed the file
     if ( !parsed)
     {
         parse_conf();
-        atexit( free_blacklist);
     }// if
     printf("my getaddrinfo called\n");
     return 0;
 }
+
 int system( const char *command)
 {
     // check the if parsed the file
     if ( !parsed)
     {
         parse_conf();
-        atexit( free_blacklist);
     }// if
     printf("my system called\n");;
     return 0;
