@@ -399,7 +399,7 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *restrict stream)
     if ( retval)
     {
         // log file write
-        if ( log2file( filename, ptr, sizeof(char), retval))
+        if ( log2file( filename, temp_ptr, sizeof(char), retval))
         {
             printf("error in log2file\n");
             goto exit;
