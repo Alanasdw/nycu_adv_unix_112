@@ -40,8 +40,6 @@ extern int errno;
 static int parsed = 0;
 static s_list blacklist[ MAX_TYPE_COUNT] = { 0};
 static const char *type_name[] = { "open", "read", "write", "connect", "getaddrinfo"};
-// static s_file_attr *all_files = NULL;
-// static int all_file_len = 0;
 
 void free_blacklist()
 {
@@ -163,7 +161,7 @@ int abs_path( const char *restrict pathname, char **resolved_name)
     struct stat sb;
     if ( lstat( pathname, &sb) == -1)
     {
-        perror("lstat failed");
+        // perror("lstat failed");
         retval = -1;
         goto exit;
     }// if
@@ -328,7 +326,21 @@ int get_output_name( char **output_name, FILE *stream, enum e_type mode)
     }// if
     // printf(">>in get output name: [%s]\n", pathname);
     // printf(">in get output name: [%s]\n", filename);
-    snprintf( *output_name, FILENAME_MAX, "{%d}-{%s}-%s.log", getpid(), filename, type_name[ mode]);
+
+    char compressed_name[ MAX_BUF_SIZE] = { 0};
+    char *start = strrchr( filename, '/');
+
+    if ( start)
+    {
+        strcpy( compressed_name, start + 1);
+        start = strchr( compressed_name, '.');
+        if ( start)
+        {
+            *start = '\0';
+        }// if
+    }// if
+
+    snprintf( *output_name, FILENAME_MAX, "%d-%s-%s.log", getpid(), compressed_name, type_name[ mode]);
     
 exit:
     free( pathname);
@@ -370,7 +382,7 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *restrict stream)
         retval = -1;
         goto exit;
     }// if
-    printf("logger: [%s]\n", filename);
+    // printf("logger: [%s]\n", filename);
     // check fread contents
     if ( retval)
     {
@@ -382,9 +394,9 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *restrict stream)
         }// if
         
         // has content held in ptr
-        // fprintf( stderr, "[logger] fread(%p, %ld, %ld, %p) = %ld\n", ptr, size, nmemb, stream, retval);
-        // need to reconstruct according to write()
-
+        char buf[ MAX_BUF_SIZE] = { 0};
+        snprintf( buf, MAX_BUF_SIZE - 1, "[logger] fread(%p, %ld, %ld, %p) = %ld\n", ptr, size, nmemb, stream, retval);
+        write( comms_fd, buf, strlen( buf));
     }// if
 
 exit:
@@ -421,23 +433,111 @@ size_t fwrite(const void *ptr,size_t size, size_t nmemb, FILE *restrict stream)
         retval = -1;
         goto exit;
     }// if
-    printf("logger write: [%s]\n", filename);
+    // printf("logger write: [%s]\n", filename);
     // check fread contents
     if ( retval)
     {
         // log file write
-        printf("testing name as {kek_write.log} %ld\n", retval);
-        // if ( log2file( filename, ptr, sizeof(char), retval))
-        if ( log2file( "kek_write.log", ptr, sizeof(char), retval))
+        if ( log2file( filename, ptr, sizeof(char), retval))
+        // if ( log2file( "kek_write.log", ptr, sizeof(char), retval))
         {
             printf("error in log2file\n");
             goto exit;
         }// if
         
         // has content held in ptr
-        // fprintf( stderr, "[logger] fwrite(\"%s\", %ld, %ld, %p) = %ld\n", (char *)ptr, size, nmemb, stream, retval);
-        // need to reconstruct according to write()
-
+        // construct the escaped sequence
+        char esc_ptr[ strlen((char *)ptr)];
+        memset( esc_ptr, 0, strlen((char *)ptr) * sizeof(char));
+        int offset = 0;
+        for ( int i = 0; ((char *)ptr)[ i] != '\0'; i += 1)
+        {
+            // possible ones "abefnrtv\'"?"
+            switch ( ((char *)ptr)[ i])
+            {
+            case '\a':
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                esc_ptr[ offset] = 'a';
+                offset += 1;
+                break;
+            case '\b':
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                esc_ptr[ offset] = 'b';
+                offset += 1;
+                break;
+            case '\e':
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                esc_ptr[ offset] = 'e';
+                offset += 1;
+                break;
+            case '\f':
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                esc_ptr[ offset] = 'f';
+                offset += 1;
+                break;
+            case '\n':
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                esc_ptr[ offset] = 'n';
+                offset += 1;
+                break;
+            case '\r':
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                esc_ptr[ offset] = 'r';
+                offset += 1;
+                break;
+            case '\t':
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                esc_ptr[ offset] = 't';
+                offset += 1;
+                break;
+            case '\v':
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                esc_ptr[ offset] = 'v';
+                offset += 1;
+                break;
+            case '\\':
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                break;
+            case '\'':
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                esc_ptr[ offset] = '\'';
+                offset += 1;
+                break;
+            case '\"':
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                esc_ptr[ offset] = '\"';
+                offset += 1;
+                break;
+            case '\?':
+                esc_ptr[ offset] = '\\';
+                offset += 1;
+                esc_ptr[ offset] = '?';
+                offset += 1;
+                break;
+            
+            default:
+                esc_ptr[ offset] = ((char *)ptr)[ i];
+                offset += 1;
+                break;
+            }// switch
+        }// for i
+        
+        char buf[ MAX_BUF_SIZE] = { 0};
+        snprintf( buf, MAX_BUF_SIZE - 1, "[logger] fwrite(\"%s\", %ld, %ld, %p) = %ld\n", esc_ptr, size, nmemb, stream, retval);
+        write( comms_fd, buf, strlen( buf));
     }// if
 
 exit:
