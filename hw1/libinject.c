@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -643,8 +645,30 @@ int getaddrinfo(const char *restrict node, const char *restrict service, const s
     {
         parse_conf();
     }// if
-    printf("my getaddrinfo called\n");
-    return 0;
+
+    int retval = 0;
+    if ( !is_match( GETADDRINFO, node))
+    {
+        size_t (* old_getaddrinfo)( const char *, const char *, const struct addrinfo *, struct addrinfo **) = NULL;
+        void *handle = dlopen("libc.so.6", RTLD_LAZY);
+        if ( handle)
+        {
+            old_getaddrinfo = dlsym( handle, "getaddrinfo");
+            retval = old_getaddrinfo( node, service, hints, res);
+            dlclose( handle);
+            handle = NULL;
+        }// if
+    }// if
+    else
+    {
+        retval = EAI_NONAME;
+    }//else
+    
+    char buf[ MAX_BUF_SIZE] = { 0};
+    snprintf( buf, MAX_BUF_SIZE - 1, "[logger] getaddrinfo(\"%s\" , %p, %p,%p) = %d\n", node, service, hints, res, retval);
+    write( comms_fd, buf, strlen( buf));
+
+    return retval;
 }
 
 int system( const char *command)
