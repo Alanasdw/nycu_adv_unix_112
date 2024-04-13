@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <regex.h>
+#include <arpa/inet.h>
 
 #include "comms.h"
 #define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof((arr)[0]))
@@ -151,6 +152,7 @@ int is_match( int blacklist_type, const char *restrict target)
             break;
         }// if
     }// for i
+    // printf("is match ret %d\n", match != REG_NOMATCH);
     return match != REG_NOMATCH;
 }
 
@@ -589,8 +591,49 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
     {
         parse_conf();
     }// if
-    printf("my connect called\n");
-    return 0;
+    // check the ip first
+
+    int retval = 0;
+    char ip[ INET6_ADDRSTRLEN]  = { 0};
+    switch ( addr -> sa_family)
+    {
+    case AF_INET:
+        inet_ntop( AF_INET, &(((struct sockaddr_in *)addr) -> sin_addr), ip, INET_ADDRSTRLEN);
+        break;
+    case AF_INET6:
+        inet_ntop( AF_INET6, &(((struct sockaddr_in *)addr) -> sin_addr), ip, INET6_ADDRSTRLEN);
+        break;
+    
+    default:
+        printf("unknown address family\n");
+        retval = -1;
+        break;
+    }// switch
+    // printf("[%s]\n", ip);
+
+    if ( !is_match( CONNECT, ip))
+    {
+        size_t (* old_connect)( int, const struct sockaddr *, socklen_t) = NULL;
+        void *handle = dlopen("libc.so.6", RTLD_LAZY);
+        if ( handle)
+        {
+            old_connect = dlsym( handle, "connect");
+            retval = old_connect( sockfd, addr, addrlen);
+            dlclose( handle);
+            handle = NULL;
+        }// if
+    }// if
+    else
+    {
+        retval = -1;
+        errno = ECONNREFUSED;
+    }// else
+    
+    char buf[ MAX_BUF_SIZE] = { 0};
+    snprintf( buf, MAX_BUF_SIZE - 1, "[logger] connect(%d,\"%s\", %d) = %d\n", sockfd, ip, addrlen, retval);
+    write( comms_fd, buf, strlen( buf));
+
+    return retval;
 }
 
 int getaddrinfo(const char *restrict node, const char *restrict service, const struct addrinfo *restrict hints, struct addrinfo **restrict res)
