@@ -678,6 +678,21 @@ int system( const char *command)
     {
         parse_conf();
     }// if
-    printf("my system called\n");;
+
+    int retval = 0;
+    size_t (* old_system)( const char *) = NULL;
+    void *handle = dlopen("libc.so.6", RTLD_LAZY);
+    if ( handle)
+    {
+        old_system = dlsym( handle, "system");
+        retval = old_system( command);
+        dlclose( handle);
+        handle = NULL;
+    }// if
+    
+    char buf[ MAX_BUF_SIZE] = { 0};
+    snprintf( buf, MAX_BUF_SIZE - 1, "[logger] system(\"%s\") = %d\n", command, retval);
+    write( comms_fd, buf, strlen( buf));
+
     return 0;
 }
