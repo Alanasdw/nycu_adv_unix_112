@@ -99,14 +99,14 @@ int parse_args( int argc, char *argv[])
         goto exit;
     }// if
     
-    printf("output_file: %s\n", args.output_file);
-    printf("sopath: %s\n", args.shared_lib);
-    printf("command to run: ");
-    for ( int i = args.commands; i < argc; i += 1)
-    {
-        printf("%s ", argv[ i]);
-    }// for i
-    printf("\n");
+    // printf("output_file: %s\n", args.output_file);
+    // printf("sopath: %s\n", args.shared_lib);
+    // printf("command to run: ");
+    // for ( int i = args.commands; i < argc; i += 1)
+    // {
+    //     printf("%s ", argv[ i]);
+    // }// for i
+    // printf("\n");
     
 exit:
     return status;

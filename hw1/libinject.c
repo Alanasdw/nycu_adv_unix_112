@@ -261,7 +261,7 @@ exit:
     {
         // fprintf( stderr, "[logger] fopen(\"%s\", \"%s\") = 0x0\n", pathname, mode);
         char buf[ MAX_BUF_SIZE] = { 0};
-        snprintf( buf, MAX_BUF_SIZE - 1, "[logger] fopen(\"%s\", \"%s\") = %p\n", pathname, mode, retval);
+        snprintf( buf, MAX_BUF_SIZE - 1, "[logger] fopen(\"%s\", \"%s\") = 0x0\n", pathname, mode);//, retval);
         write( comms_fd, buf, strlen( buf));
     }// if
     else
