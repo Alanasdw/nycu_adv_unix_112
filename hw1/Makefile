@@ -10,7 +10,12 @@ LIBFLAGS = -Wall -shared -fPIC
 PRELOAD_LIB = libinject.c
 PRELOAD_LIBTARGET = logger.so
 
-all: $(TARGET) $(PRELOAD_LIBTARGET)
+PLAYGROUND_FILE = file.txt
+
+all: $(TARGET) $(PRELOAD_LIBTARGET) $(PLAYGROUND_FILE)
+
+$(PLAYGROUND_FILE):
+	touch $@
 
 $(TARGET): $(SOURCE) $(LIBTARGET)
 	$(CC) $(CFLAGS) -o $@ $<
@@ -20,4 +25,4 @@ $(PRELOAD_LIBTARGET): $(PRELOAD_LIB)
 	$(CC) $(LIBFLAGS) -g -ldl -lc -o $@ $<
 
 clean:
-	rm -f $(TARGET) $(PRELOAD_LIBTARGET)
+	rm -f $(TARGET) $(PRELOAD_LIBTARGET) $(PLAYGROUND_FILE)
