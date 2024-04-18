@@ -13,7 +13,6 @@
 #include <regex.h>
 #include <arpa/inet.h>
 
-#include "comms.h"
 #define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof((arr)[0]))
 #define MAX_BUF_SIZE (256)
 
@@ -262,14 +261,14 @@ exit:
         // fprintf( stderr, "[logger] fopen(\"%s\", \"%s\") = 0x0\n", pathname, mode);
         char buf[ MAX_BUF_SIZE] = { 0};
         snprintf( buf, MAX_BUF_SIZE - 1, "[logger] fopen(\"%s\", \"%s\") = 0x0\n", pathname, mode);//, retval);
-        write( comms_fd, buf, strlen( buf));
+        write( STDERR_FILENO, buf, strlen( buf));
     }// if
     else
     {
         // fprintf( stderr, "[logger] fopen(\"%s\", \"%s\") = %p\n", pathname, mode, retval);
         char buf[ MAX_BUF_SIZE] = { 0};
         snprintf( buf, MAX_BUF_SIZE - 1, "[logger] fopen(\"%s\", \"%s\") = %p\n", pathname, mode, retval);
-        write( comms_fd, buf, strlen( buf));
+        write( STDERR_FILENO, buf, strlen( buf));
     }// else
     fflush( stderr);
 
@@ -420,7 +419,7 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *restrict stream)
         // has content held in ptr
         char buf[ MAX_BUF_SIZE] = { 0};
         snprintf( buf, MAX_BUF_SIZE - 1, "[logger] fread(%p, %ld, %ld, %p) = %ld\n", ptr, size, nmemb, stream, retval);
-        write( comms_fd, buf, strlen( buf));
+        write( STDERR_FILENO, buf, strlen( buf));
 
         if ( retval)
         {
@@ -577,7 +576,7 @@ size_t fwrite(const void *ptr,size_t size, size_t nmemb, FILE *restrict stream)
 
     // char buf[ MAX_BUF_SIZE] = { 0};
     snprintf( buf, MAX_BUF_SIZE - 1, "[logger] fwrite(\"%s\", %ld, %ld, %p) = %ld\n", esc_ptr, size, nmemb, stream, retval);
-    write( comms_fd, buf, strlen( buf));
+    write( STDERR_FILENO, buf, strlen( buf));
 
 exit:
     free( filename);
@@ -633,7 +632,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
     
     char buf[ MAX_BUF_SIZE] = { 0};
     snprintf( buf, MAX_BUF_SIZE - 1, "[logger] connect(%d,\"%s\", %d) = %d\n", sockfd, ip, addrlen, retval);
-    write( comms_fd, buf, strlen( buf));
+    write( STDERR_FILENO, buf, strlen( buf));
 
     return retval;
 }
@@ -666,7 +665,7 @@ int getaddrinfo(const char *restrict node, const char *restrict service, const s
     
     char buf[ MAX_BUF_SIZE] = { 0};
     snprintf( buf, MAX_BUF_SIZE - 1, "[logger] getaddrinfo(\"%s\" , %p, %p,%p) = %d\n", node, service, hints, res, retval);
-    write( comms_fd, buf, strlen( buf));
+    write( STDERR_FILENO, buf, strlen( buf));
 
     return retval;
 }
@@ -692,7 +691,7 @@ int system( const char *command)
     
     char buf[ MAX_BUF_SIZE] = { 0};
     snprintf( buf, MAX_BUF_SIZE - 1, "[logger] system(\"%s\") = %d\n", command, retval);
-    write( comms_fd, buf, strlen( buf));
+    write( STDERR_FILENO, buf, strlen( buf));
 
     return 0;
 }

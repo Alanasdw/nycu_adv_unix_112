@@ -4,8 +4,6 @@
 #include <string.h>
 #include <sys/wait.h>
 
-#include "comms.h"
-
 extern char *optarg;
 extern int optind, opterr, optopt;
 
@@ -152,7 +150,7 @@ int main( int argc, char *argv[])
         close( child2parent[ 0]);
 
         // change the stdout before execvp
-        comms_fd = child2parent[ 1];
+        dup2( child2parent[ 1], STDERR_FILENO);
 
         // create sopath
         int sopath_len = strlen( "LD_PRELOAD=") + strlen( args.shared_lib);
@@ -171,13 +169,16 @@ int main( int argc, char *argv[])
         close( child2parent[ 1]);
 
         FILE *stream_out = stderr;
+        // printf("comms:%d, output file:%s\n", comms_fd, args.output_file);
         if ( args.output_file)
         {
             stream_out = fopen( args.output_file, "w+");
+            // printf("stream %p, %p\n", stream_out, stdout);
         }// if
         while ( read( child2parent[ 0], buf, 256) > 0)
         {
             fprintf( stream_out, "%s", buf);
+            fflush( stream_out);
             memset( buf, 0, sizeof( buf));
         }// while
         if ( args.output_file)

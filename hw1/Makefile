@@ -19,8 +19,5 @@ $(PRELOAD_LIBTARGET): $(PRELOAD_LIB)
 # 	remember to link for dlopen
 	$(CC) $(LIBFLAGS) -g -ldl -lc -o $@ $<
 
-run: all
-	./logger
-
 clean:
 	rm -f $(TARGET) $(PRELOAD_LIBTARGET)
