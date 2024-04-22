@@ -137,6 +137,33 @@ int is_match( int blacklist_type, const char *restrict target)
     for ( int i = 0; i < blacklist[ blacklist_type].len; i += 1)
     {
         // printf("[%s] [%s]\n", blacklist[ blacklist_type].list[ i], target);
+        // only one * at the end at most
+        if ( strchr( blacklist[ blacklist_type].list[ i], '*') != NULL)
+        {
+            // has a *
+            int prefix_len = strchr( blacklist[ blacklist_type].list[ i], '*') - blacklist[ blacklist_type].list[ i];
+            if ( strncmp( target, blacklist[ blacklist_type].list[ i], prefix_len) == 0)
+            {
+                // matched blacklist
+                match = 0;
+            }// if
+        }// if
+        else
+        {
+            // needs exact match
+            // printf("before regcomp\n");
+            if ( regcomp( &preg, blacklist[ blacklist_type].list[ i], REG_NEWLINE))
+            {
+                printf("regex compile error on %s\n", blacklist[ blacklist_type].list[ i]);
+                exit( 1);
+            }// if
+            // printf("before regexec\n");
+            match = regexec( &preg, target, ARRAY_SIZE( match_info), match_info, 0);
+            regfree( &preg);
+        }// else
+
+
+        /*
         // printf("before regcomp\n");
         if ( regcomp( &preg, blacklist[ blacklist_type].list[ i], REG_NEWLINE))
         {
@@ -146,6 +173,7 @@ int is_match( int blacklist_type, const char *restrict target)
         // printf("before regexec\n");
         match = regexec( &preg, target, ARRAY_SIZE( match_info), match_info, 0);
         regfree( &preg);
+        */
         if ( match == 0)
         {
             // matched in blacklist
@@ -437,7 +465,7 @@ exit:
     return retval;
 }
 
-size_t fwrite(const void *ptr,size_t size, size_t nmemb, FILE *restrict stream)
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *restrict stream)
 {
     // check the if parsed the file
     if ( !parsed)
@@ -554,6 +582,7 @@ size_t fwrite(const void *ptr,size_t size, size_t nmemb, FILE *restrict stream)
     
     // start the validated write operation
     char *pwd_stream = resolve_name( stream);
+    // printf("fwrite resolved name:[%s]\n", pwd_stream);
     if ( !is_match( WRITE, pwd_stream))
     {
         size_t (* old_fwrite)( const void *, size_t, size_t, FILE *) = NULL;
