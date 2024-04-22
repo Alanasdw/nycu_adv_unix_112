@@ -244,7 +244,12 @@ FILE *fopen( const char *restrict pathname, const char *restrict mode)
     switch ( abs_path( pathname, &resolved_name))
     {
     case -1:
-        goto exit;
+        if ( errno == EINVAL)
+        {
+            goto exit;
+        }// if
+        // the file does not exist yet, give the pathname back and let them check and create the file
+        resolved_name = (char *)pathname;
         break;
     case 0:
         // is symlink
@@ -270,6 +275,7 @@ FILE *fopen( const char *restrict pathname, const char *restrict mode)
         if ( handle)
         {
             old_fopen = dlsym( handle, "fopen");
+            printf("fopen given mode[%s]\n", mode);
             retval = old_fopen( pathname, mode);
             dlclose( handle);
             handle = NULL;
