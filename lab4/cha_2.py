@@ -23,6 +23,6 @@ q
     # print( ">>>>>>>kek" + recved + "kek<<<<<<<")
     r.close()
 
-    print( "finding flag")
+    # print( "finding flag")
     print( recved[ recved.find("FLAG{"): ])
 
