@@ -11,15 +11,21 @@ g
 127.0.0.1/10000
 v
 """
+#     payload = """g
+# google.com/10000
+# g
+# 127.0.0.1/10000
+# v
+# """
     r.sendline( payload.encode())
     # recved = r.recvuntil("?").decode()
     time.sleep(0.5)
     printer = """v
 q
 """
-
+    finisher = "}"
     r.sendline( printer.encode())
-    recved = r.recvuntil("}".encode()).decode()
+    recved = r.recvuntil( finisher.encode()).decode()
     # print( ">>>>>>>kek" + recved + "kek<<<<<<<")
     r.close()
 

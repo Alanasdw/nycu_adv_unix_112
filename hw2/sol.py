@@ -354,7 +354,7 @@ if __name__ == "__main__":
     flags = []
 
     for port, solver in functions.items():
-        r = remote( 'up.zoolab.org', int( port))
+        r = remote( 'up2.zoolab.org', int( port))
         given = r.recvuntil( b'Enter').decode()
 
         # print( given)
