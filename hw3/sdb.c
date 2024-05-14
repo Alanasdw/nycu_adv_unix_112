@@ -34,11 +34,15 @@ int main( int argc, char *argv[])
 {
     if ( argc > 1)
     {
-        printf("%s\n", argv[ 1]);
+        // printf("%s\n", argv[ 1]);
+        if ( f_load( &argv[ 1], argc - 1))
+        {
+            goto exit;
+        }// if
     }// if
 
     while ( shell() == 0);
-
+exit:
     return 0;
 }
 
@@ -91,7 +95,8 @@ int shell()
         if ( strcmp( args[ 0], command_names[ i]) == 0)
         {
             flag = 0;
-            retval = commands[ i]( args, arg_count);
+            // excluding the command name
+            retval = commands[ i]( &args[ 1], arg_count - 1);
             break;
         }// if
     }// for i
@@ -114,7 +119,15 @@ int f_load( char *args[], int arg_count)
     printf("*** f_load not finished ***\n");
 
     // check file access
+    if ( access( args[ 0], X_OK))
+    {
+        // not permission to execute
+        printf("access error\n");
+        retval = 1;
+        goto exit;
+    }// if
 
+    printf("file accessable\n");
 
     // int pid = fork();
     int pid = 2;
@@ -135,6 +148,8 @@ int f_load( char *args[], int arg_count)
         // parent process
         break;
     }// switch
+
+exit:
 
     return retval;
 }
