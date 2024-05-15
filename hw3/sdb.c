@@ -185,7 +185,7 @@ int f_load( char *args[], int arg_count)
         printf("parent\n");
         int status = 0;
         waitpid( pid, &status, 0);
-        ptrace( PTRACE_SETOPTIONS, pid, 0, PTRACE_O_EXITKILL | PTRACE_O_TRACEEXIT);
+        ptrace( PTRACE_SETOPTIONS, pid, 0, PTRACE_O_EXITKILL);// | PTRACE_O_TRACEEXIT);
         child_pid = pid;
         break;
     }// switch
@@ -205,6 +205,21 @@ int f_cont( char *args[], int arg_count)
     printf("*** f_cont not finished ***\n");
 
     ptrace( PTRACE_CONT, child_pid, 0, 0);
+
+    // stop this process until the return of the child
+    // could be stopping or dying child
+    int status;
+    waitpid( child_pid, &status, 0);
+    if ( WIFEXITED( status))
+    {
+        printf("child dying: %d\n", WEXITSTATUS( status));
+        printf("** the target program terminated.\n");
+    }// if
+    else if ( WIFSTOPPED( status))
+    {
+        printf("stopped by siganl: %d\n", WSTOPSIG( status));
+    }// else if
+
 
     return 0;
 }
