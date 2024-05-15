@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/ptrace.h>
+#include <sys/wait.h>
 
 enum e_comtype
 {
@@ -13,6 +15,7 @@ enum e_comtype
     DELETE,
     PATCH,
     SYSCALL,
+    EXIT,
     COMTYPE_COUNT
 };
 
@@ -24,11 +27,15 @@ int f_break( char *args[], int arg_count);
 int f_delete( char *args[], int arg_count);
 int f_patch( char *args[], int arg_count);
 int f_syscall( char *args[], int arg_count);
+int f_exit( char *args[], int arg_count);
 int shell();
 
+
+int child_pid = 0;
+
 // info break & reg are in the same function
-static char *command_names[] = { "load", "si", "cont", "info", "break", "delete", "patch", "syscall"};
-static int (*commands[])(  char *args[], int arg_count) = { f_load, f_si, f_cont, f_info, f_break, f_delete, f_patch, f_syscall};
+static char *command_names[] = { "load", "si", "cont", "info", "break", "delete", "patch", "syscall", "exit"};
+static int (*commands[])(  char *args[], int arg_count) = { f_load, f_si, f_cont, f_info, f_break, f_delete, f_patch, f_syscall, f_exit};
 
 int main( int argc, char *argv[])
 {
@@ -46,7 +53,6 @@ exit:
     return 0;
 }
 
-
 int shell()
 {
     // print banner
@@ -60,6 +66,11 @@ int shell()
     // adjust the delimenator that is given by the getline
     *strchr( line, '\n') = '\0';
     line_len = strlen( line);
+    // prevent the empty line from segfaulting
+    if ( line_len == 0)
+    {
+        goto clean;
+    }// if
 
 
     // break the string to arguments
@@ -73,7 +84,7 @@ int shell()
         }// if
     }// for i
 
-    char *args[ arg_count];
+    char **args = calloc( arg_count, sizeof(char *));
     args[ 0] = strtok( line, " ");
     for ( int i = 1; i < arg_count; i += 1)
     {
@@ -103,14 +114,24 @@ int shell()
 
     if ( flag)
     {
-        printf("nothing matched\n");
+        printf("no commands matched\n");
     }// if
 
+    free( args);
+    args = NULL;
+    arg_count = 0;
+
+clean:
     free( line);
     line = NULL;
     line_len = 0;
 
     return retval;
+}
+
+int f_exit( char *args[], int arg_count)
+{
+    return 1;
 }
 
 int f_load( char *args[], int arg_count)
@@ -119,6 +140,14 @@ int f_load( char *args[], int arg_count)
     printf("*** f_load not finished ***\n");
 
     // check file access
+    // printf("arg count: %d\n", arg_count);
+    if ( arg_count < 1)
+    {
+        printf("load: to few arguments\n");
+        retval = 1;
+        goto exit;
+    }// if
+    
     if ( access( args[ 0], X_OK))
     {
         // not permission to execute
@@ -127,10 +156,11 @@ int f_load( char *args[], int arg_count)
         goto exit;
     }// if
 
-    printf("file accessable\n");
+    // printf("file accessable\n");
 
-    // int pid = fork();
-    int pid = 2;
+    int pid = fork();
+    // int pid = 2;
+    // printf("pid =>> %d\n", pid);
 
     switch ( pid)
     {
@@ -142,15 +172,25 @@ int f_load( char *args[], int arg_count)
 
     case 0:
         // child process
+        printf("child\n");
+        fflush( NULL);
+        ptrace( PTRACE_TRACEME, 0, 0, 0);
+        // execv( args[ 0], args);
+        execl( args[ 0], args[ 0], NULL);
+        perror("exec error: ");
         break;
     
     default:
         // parent process
+        printf("parent\n");
+        int status = 0;
+        waitpid( pid, &status, 0);
+        ptrace( PTRACE_SETOPTIONS, pid, 0, PTRACE_O_EXITKILL | PTRACE_O_TRACEEXIT);
+        child_pid = pid;
         break;
     }// switch
 
 exit:
-
     return retval;
 }
 
@@ -163,6 +203,9 @@ int f_si( char *args[], int arg_count)
 int f_cont( char *args[], int arg_count)
 {
     printf("*** f_cont not finished ***\n");
+
+    ptrace( PTRACE_CONT, child_pid, 0, 0);
+
     return 0;
 }
 
