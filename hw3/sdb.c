@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
+#include <sys/user.h>
 
 enum e_comtype
 {
@@ -227,6 +228,22 @@ int f_cont( char *args[], int arg_count)
 int f_info( char *args[], int arg_count)
 {
     printf("*** f_info not finished ***\n");
+
+    if ( arg_count == 1 && strncmp( args[ 0], "regs", strlen("regs")) == 0)
+    {
+        printf("all the registers:\n");
+        struct user_regs_struct regs;
+        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+
+        printf("$rax 0x%016llx    $rbx 0x%016llx    $rcx 0x%016llx\n", regs.rax, regs.rbx, regs.rcx);
+        printf("$rdx 0x%016llx    $rsi 0x%016llx    $rdi 0x%016llx\n", regs.rdx, regs.rsi, regs.rdi);
+        printf("$rbp 0x%016llx    $rsp 0x%016llx    $r8  0x%016llx\n", regs.rbp, regs.rsp, regs.r8);
+        printf("$r9  0x%016llx    $r10 0x%016llx    $r11 0x%016llx\n", regs.r9, regs.r10, regs.r11);
+        printf("$r12 0x%016llx    $r13 0x%016llx    $r14 0x%016llx\n", regs.r12, regs.r13, regs.r14);
+        printf("$r15 0x%016llx    $rip 0x%016llx    $eflags 0x%016llx\n", regs.r15, regs.rip, regs.eflags);
+    }// if
+    
+
     return 0;
 }
 
