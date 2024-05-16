@@ -6,6 +6,8 @@
 #include <sys/wait.h>
 #include <sys/user.h>
 #include <capstone/capstone.h>
+#include <errno.h>
+#include <linux/ptrace.h>
 
 enum e_comtype
 {
@@ -65,12 +67,6 @@ exit:
 
 int shell()
 {
-    // check for the program loaded
-    if ( child_pid)
-    {
-        disassemble();
-    }// if
-
     // print banner
     printf("(sdb) ");
 
@@ -206,6 +202,12 @@ int f_load( char *args[], int arg_count)
         break;
     }// switch
 
+    // check for the program loaded
+    if ( child_pid)
+    {
+        disassemble();
+    }// if
+
 exit:
     return retval;
 }
@@ -214,6 +216,27 @@ int f_si( char *args[], int arg_count)
 {
     printf("*** f_si not finished ***\n");
     ptrace( PTRACE_SINGLESTEP, child_pid, 0, 0);
+
+    // stop this process until the return of the child
+    // could be stopping or dying child
+    int status;
+    waitpid( child_pid, &status, 0);
+    if ( WIFEXITED( status))
+    {
+        printf("child dying: %d\n", WEXITSTATUS( status));
+        printf("** the target program terminated.\n");
+        child_pid = 0;
+    }// if
+    else if ( WIFSTOPPED( status))
+    {
+        printf("stopped by signal: %d\n", WSTOPSIG( status));
+    }// else if
+    // check for the program loaded
+    if ( child_pid)
+    {
+        disassemble();
+    }// if
+
     return 0;
 }
 
@@ -231,12 +254,18 @@ int f_cont( char *args[], int arg_count)
     {
         printf("child dying: %d\n", WEXITSTATUS( status));
         printf("** the target program terminated.\n");
+        child_pid = 0;
     }// if
     else if ( WIFSTOPPED( status))
     {
-        printf("stopped by siganl: %d\n", WSTOPSIG( status));
+        printf("stopped by signal: %d\n", WSTOPSIG( status));
     }// else if
 
+    // check for the program loaded
+    if ( child_pid)
+    {
+        disassemble();
+    }// if
 
     return 0;
 }
@@ -285,6 +314,46 @@ int f_syscall( char *args[], int arg_count)
 {
     printf("*** f_syscall not finished ***\n");
     ptrace( PTRACE_SYSCALL, child_pid, 0, 0);
+
+    // stop this process until the return of the child
+    // could be stopping or dying child
+    int status;
+    waitpid( child_pid, &status, 0);
+    if ( WIFEXITED( status))
+    {
+        printf("child dying: %d\n", WEXITSTATUS( status));
+        printf("** the target program terminated.\n");
+        child_pid = 0;
+    }// if
+    else if ( WIFSTOPPED( status))
+    {
+        printf("stopped by signal: %d\n", WSTOPSIG( status));
+        
+        struct ptrace_syscall_info sys_info;
+        ptrace( PTRACE_GET_SYSCALL_INFO, child_pid, 0, &sys_info);
+
+        struct user_regs_struct regs;
+        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+        if ( sys_info.op == PTRACE_SYSCALL_INFO_ENTRY)
+        {
+            // start of the system call
+            printf("** enter a syscall([%llu]) at [%llx].\n", sys_info.entry.nr, regs.rip);
+        }// if
+        else
+        {
+            // end of the system call
+            printf("** leave a syscall([%llu]) = [ret] at [%llx].\n", sys_info.exit.rval, regs.rip);
+        }// else
+        
+
+
+    }// else if
+    // check for the program loaded
+    if ( child_pid)
+    {
+        disassemble();
+    }// if
+
     return 0;
 }
 
@@ -294,11 +363,11 @@ void disassemble()
     ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
 
     // code space
+    // max instruction line is 15 bytes for x86_64
     uint8_t code[ 15 * 5] = { 0};
     int code_len = 0;
     long temp;
-    printf("%llx: ", regs.rip);
-    for ( int i = 0; i < 2; i += 1)
+    for ( int i = 0; i < 5; i += 1)
     {
         temp = ptrace( PTRACE_PEEKDATA, child_pid, regs.rip + code_len, 0);
         memmove( code + code_len, &temp, sizeof(temp));
@@ -320,7 +389,7 @@ void disassemble()
     size_t count;
     count = cs_disasm( cshandle, code, code_len, regs.rip, 0, &inst);
 
-    for ( size_t j = 0; j < count; j += 1)
+    for ( size_t j = 0; j < ( count >= 5 ? 5: count); j += 1)
     {
         printf("0x%" PRIx64 ":\t%s\t%s\n", inst[j].address, inst[j].mnemonic, inst[j].op_str);
     }// for i
