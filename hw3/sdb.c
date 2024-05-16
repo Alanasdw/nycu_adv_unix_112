@@ -5,6 +5,7 @@
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <sys/user.h>
+#include <capstone/capstone.h>
 
 enum e_comtype
 {
@@ -30,9 +31,17 @@ int f_patch( char *args[], int arg_count);
 int f_syscall( char *args[], int arg_count);
 int f_exit( char *args[], int arg_count);
 int shell();
+void disassemble();
 
 
 int child_pid = 0;
+// breakpoint storage
+typedef struct _sbreakpoint
+{
+    int number;
+    unsigned long address;
+} s_breakpoint;
+
 
 // info break & reg are in the same function
 static char *command_names[] = { "load", "si", "cont", "info", "break", "delete", "patch", "syscall", "exit"};
@@ -56,6 +65,12 @@ exit:
 
 int shell()
 {
+    // check for the program loaded
+    if ( child_pid)
+    {
+        disassemble();
+    }// if
+
     // print banner
     printf("(sdb) ");
 
@@ -198,6 +213,7 @@ exit:
 int f_si( char *args[], int arg_count)
 {
     printf("*** f_si not finished ***\n");
+    ptrace( PTRACE_SINGLESTEP, child_pid, 0, 0);
     return 0;
 }
 
@@ -268,5 +284,50 @@ int f_patch( char *args[], int arg_count)
 int f_syscall( char *args[], int arg_count)
 {
     printf("*** f_syscall not finished ***\n");
+    ptrace( PTRACE_SYSCALL, child_pid, 0, 0);
     return 0;
+}
+
+void disassemble()
+{
+    struct user_regs_struct regs;
+    ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+
+    // code space
+    uint8_t code[ 15 * 5] = { 0};
+    int code_len = 0;
+    long temp;
+    printf("%llx: ", regs.rip);
+    for ( int i = 0; i < 2; i += 1)
+    {
+        temp = ptrace( PTRACE_PEEKDATA, child_pid, regs.rip + code_len, 0);
+        memmove( code + code_len, &temp, sizeof(temp));
+        code_len += sizeof(temp);
+    }// for i
+
+    
+    csh cshandle = 0;
+
+    if ( cs_open( CS_ARCH_X86, CS_MODE_64, &cshandle) != CS_ERR_OK)
+    {
+        printf("cs_open failed\n");
+        goto exit;
+    }// if
+    
+    cs_insn *inst;
+    inst = cs_malloc( cshandle);
+
+    size_t count;
+    count = cs_disasm( cshandle, code, code_len, regs.rip, 0, &inst);
+
+    for ( size_t j = 0; j < count; j += 1)
+    {
+        printf("0x%" PRIx64 ":\t%s\t%s\n", inst[j].address, inst[j].mnemonic, inst[j].op_str);
+    }// for i
+    
+
+    cs_free( inst, 1);
+    cs_close( &cshandle);
+exit:
+    return;
 }
