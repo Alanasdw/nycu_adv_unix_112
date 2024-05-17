@@ -34,16 +34,26 @@ int f_syscall( char *args[], int arg_count);
 int f_exit( char *args[], int arg_count);
 int shell();
 void disassemble( unsigned long long rip);
+void enable_break();
+void disable_break();
 
 
 int child_pid = 0;
 // breakpoint storage
+typedef struct _sLLnode
+{
+    struct _sLLnode *next;
+    void *data;
+} s_LLnode;
+
 typedef struct _sbreakpoint
 {
     int number;
-    unsigned long address;
+    unsigned long long address;
+    char orig_inst;
 } s_breakpoint;
-
+s_LLnode *break_head = NULL;
+int next_num = 0;
 
 // info break & reg are in the same function
 static char *command_names[] = { "load", "si", "cont", "info", "break", "delete", "patch", "syscall", "exit"};
@@ -143,6 +153,26 @@ clean:
 
 int f_exit( char *args[], int arg_count)
 {
+    if ( break_head)
+    {
+        // cleanup breaks
+        s_LLnode *temp = break_head -> next;
+        while ( temp)
+        {
+            free( break_head -> data);
+            break_head -> data = NULL;
+            free( break_head);
+
+            break_head = temp;
+            temp = break_head -> next;
+        }// while
+
+        free( break_head -> data);
+        break_head -> data = NULL;
+        free( break_head);
+        break_head = NULL;
+    }// if
+
     return 1;
 }
 
@@ -184,8 +214,8 @@ int f_load( char *args[], int arg_count)
 
     case 0:
         // child process
-        printf("child\n");
-        fflush( NULL);
+        // printf("child\n");
+        // fflush( NULL);
         ptrace( PTRACE_TRACEME, 0, 0, 0);
         // execv( args[ 0], args);
         execl( args[ 0], args[ 0], NULL);
@@ -194,7 +224,7 @@ int f_load( char *args[], int arg_count)
     
     default:
         // parent process
-        printf("parent\n");
+        // printf("parent\n");
         int status = 0;
         waitpid( pid, &status, 0);
         ptrace( PTRACE_SETOPTIONS, pid, 0, PTRACE_O_EXITKILL);// | PTRACE_O_TRACEEXIT);
@@ -270,7 +300,7 @@ int f_cont( char *args[], int arg_count)
     {
         struct user_regs_struct regs;
         ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
-        disassemble( regs.rip);
+        disassemble( regs.rip - 1);
     }// if
 
     return 0;
@@ -293,14 +323,81 @@ int f_info( char *args[], int arg_count)
         printf("$r12 0x%016llx    $r13 0x%016llx    $r14 0x%016llx\n", regs.r12, regs.r13, regs.r14);
         printf("$r15 0x%016llx    $rip 0x%016llx    $eflags 0x%016llx\n", regs.r15, regs.rip, regs.eflags);
     }// if
-    
+    else if ( arg_count == 1 && strncmp( args[ 0], "break", strlen("break")) == 0)
+    {
+        s_LLnode *current = break_head;
+        if ( current == NULL)
+        {
+            // no breakpoints
+            printf("** no breakpoints.\n");
+        }// if
+        else
+        {
+            int align = 0;
+            align = printf("Num%*s", 5, " ");
+            printf("Address\n");
+            while ( current)
+            {
+                int cur_offset = align;
+                s_breakpoint *cur_data = (s_breakpoint *)current -> data;
+                cur_offset -= printf("%d", cur_data -> number);
+                printf("%*s%#llx\n", cur_offset, " ", cur_data -> address);
 
+                current = current -> next;
+            }// while
+        }// else
+    }// else if
+    
     return 0;
 }
 
 int f_break( char *args[], int arg_count)
 {
     printf("*** f_break not finished ***\n");
+    unsigned long long address = strtoull( args[ 0], NULL, 16);
+    if ( arg_count != 1)
+    {
+        goto exit;
+    }// if
+
+    unsigned long long data;
+    data = ptrace( PTRACE_PEEKTEXT, child_pid, address, 0);
+    char *ptr = (char *)&data;
+    if ( break_head == NULL)
+    {
+        // new element
+        break_head = calloc( 1, sizeof(s_LLnode));
+        s_breakpoint *new_data = calloc( 1, sizeof(s_breakpoint));
+        break_head -> data = new_data;
+        new_data -> address = address;
+        new_data -> number = next_num;
+        next_num += 1;
+        new_data -> orig_inst = ptr[ 0];
+    }// if
+    else
+    {
+        // find end of list
+        s_LLnode *end = break_head;
+        while ( end -> next)
+        {
+            end = end -> next;
+        }// while
+        
+        end -> next = calloc( 1, sizeof(s_LLnode));
+        end = end -> next;
+        s_breakpoint *temp_new = calloc( 1, sizeof(s_breakpoint));
+        end -> data = temp_new;
+        temp_new -> address = address;
+        temp_new -> number = next_num;
+        next_num += 1;
+        temp_new -> orig_inst = ptr[ 0];
+    }// else
+
+    ptr[ 0] = 0xcc;
+    ptrace( PTRACE_POKETEXT, child_pid, address, data);
+    printf("breakpoint set @ %s => %llu\n", args[ 0], address);
+
+exit:
     return 0;
 }
 
@@ -366,6 +463,7 @@ int f_syscall( char *args[], int arg_count)
 
 void disassemble( unsigned long long rip)
 {
+    disable_break();
     // code space
     // max instruction line is 15 bytes for x86_64
     uint8_t code[ 15 * 5] = { 0};
@@ -373,7 +471,7 @@ void disassemble( unsigned long long rip)
     long temp;
     for ( int i = 0; i < 5; i += 1)
     {
-        temp = ptrace( PTRACE_PEEKDATA, child_pid, rip + code_len, 0);
+        temp = ptrace( PTRACE_PEEKTEXT, child_pid, rip + code_len, 0);
         memmove( code + code_len, &temp, sizeof(temp));
         code_len += sizeof(temp);
     }// for i
@@ -407,5 +505,50 @@ void disassemble( unsigned long long rip)
     cs_free( inst, 1);
     cs_close( &cshandle);
 exit:
+
+    enable_break();
+    return;
+}
+
+void disable_break()
+{
+    s_LLnode *current = break_head;
+    while ( current)
+    {
+        s_breakpoint *cur_data = (s_breakpoint *)current -> data;
+
+        unsigned long long code = 0;
+        code = ptrace( PTRACE_PEEKTEXT, child_pid, cur_data -> address, 0);
+        // printf("before disable: %llx\n", code);
+        char *ptr = (char *)&code;
+        ptr[ 0] = cur_data -> orig_inst;
+        ptrace( PTRACE_POKETEXT, child_pid, cur_data -> address, code);
+        // printf("disabled to:    %llx\n", code);
+        cur_data = NULL;
+        current = current -> next;
+    }// while
+    
+    return;
+}
+
+void enable_break()
+{
+    s_LLnode *current = break_head;
+    while ( current)
+    {
+        s_breakpoint *cur_data = (s_breakpoint *)current -> data;
+
+        unsigned long long code = 0;
+        code = ptrace( PTRACE_PEEKTEXT, child_pid, cur_data -> address, 0);
+        // printf("before enable: %llx\n", code);
+        char *ptr = (char *)&code;
+        ptr[ 0] = 0xcc;
+        ptrace( PTRACE_POKETEXT, child_pid, cur_data -> address, code);
+        // printf("enabled to:    %llx\n", code);
+
+        cur_data = NULL;
+        current = current -> next;
+    }// while
+
     return;
 }
