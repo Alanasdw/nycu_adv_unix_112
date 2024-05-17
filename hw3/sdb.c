@@ -8,6 +8,7 @@
 #include <capstone/capstone.h>
 #include <errno.h>
 #include <linux/ptrace.h>
+#include <signal.h>
 
 enum e_comtype
 {
@@ -179,7 +180,11 @@ int f_exit( char *args[], int arg_count)
 int f_load( char *args[], int arg_count)
 {
     int retval = 0;
-    printf("*** f_load not finished ***\n");
+    // printf("*** f_load not finished ***\n");
+    if ( child_pid)
+    {
+        kill( child_pid, SIGKILL);
+    }// if
 
     // check file access
     // printf("arg count: %d\n", arg_count);
@@ -237,6 +242,7 @@ int f_load( char *args[], int arg_count)
     {
         struct user_regs_struct regs;
         ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+        printf("** program '%s' loaded. entry point %#llx.\n", args[ 0], regs.rip);
         disassemble( regs.rip);
     }// if
 
@@ -246,7 +252,13 @@ exit:
 
 int f_si( char *args[], int arg_count)
 {
-    printf("*** f_si not finished ***\n");
+    // printf("*** f_si not finished ***\n");
+    if ( child_pid == 0)
+    {
+        printf("** please load a program first.\n");
+        goto exit;
+    }// if
+    
     ptrace( PTRACE_SINGLESTEP, child_pid, 0, 0);
 
     // stop this process until the return of the child
@@ -255,13 +267,13 @@ int f_si( char *args[], int arg_count)
     waitpid( child_pid, &status, 0);
     if ( WIFEXITED( status))
     {
-        printf("child dying: %d\n", WEXITSTATUS( status));
+        // printf("child dying: %d\n", WEXITSTATUS( status));
         printf("** the target program terminated.\n");
         child_pid = 0;
     }// if
     else if ( WIFSTOPPED( status))
     {
-        printf("stopped by signal: %d\n", WSTOPSIG( status));
+        // printf("stopped by signal: %d\n", WSTOPSIG( status));
     }// else if
     // check for the program loaded
     if ( child_pid)
@@ -270,14 +282,18 @@ int f_si( char *args[], int arg_count)
         ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
         disassemble( regs.rip);
     }// if
-
+exit:
     return 0;
 }
 
 int f_cont( char *args[], int arg_count)
 {
-    printf("*** f_cont not finished ***\n");
-
+    // printf("*** f_cont not finished ***\n");
+    if ( child_pid == 0)
+    {
+        printf("** please load a program first.\n");
+        goto exit;
+    }// if
     ptrace( PTRACE_CONT, child_pid, 0, 0);
 
     // stop this process until the return of the child
@@ -286,13 +302,13 @@ int f_cont( char *args[], int arg_count)
     waitpid( child_pid, &status, 0);
     if ( WIFEXITED( status))
     {
-        printf("child dying: %d\n", WEXITSTATUS( status));
+        // printf("child dying: %d\n", WEXITSTATUS( status));
         printf("** the target program terminated.\n");
         child_pid = 0;
     }// if
     else if ( WIFSTOPPED( status))
     {
-        printf("stopped by signal: %d\n", WSTOPSIG( status));
+        // printf("stopped by signal: %d\n", WSTOPSIG( status));
     }// else if
 
     // check for the program loaded
@@ -302,13 +318,18 @@ int f_cont( char *args[], int arg_count)
         ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
         disassemble( regs.rip - 1);
     }// if
-
+exit:
     return 0;
 }
 
 int f_info( char *args[], int arg_count)
 {
-    printf("*** f_info not finished ***\n");
+    // printf("*** f_info not finished ***\n");
+    if ( child_pid == 0)
+    {
+        printf("** please load a program first.\n");
+        goto exit;
+    }// if
 
     if ( arg_count == 1 && strncmp( args[ 0], "regs", strlen("regs")) == 0)
     {
@@ -347,7 +368,7 @@ int f_info( char *args[], int arg_count)
             }// while
         }// else
     }// else if
-    
+exit:
     return 0;
 }
 
@@ -404,6 +425,61 @@ exit:
 int f_delete( char *args[], int arg_count)
 {
     printf("*** f_delete not finished ***\n");
+
+    int flag = 1;
+    if ( arg_count != 1)
+    {
+        goto exit;
+    }// if
+    
+    int target_num = strtol( args[ 0], NULL, 10);
+    if ( target_num >= next_num)
+    {
+        // impossible to exist
+        goto exit;
+    }// if
+
+    s_LLnode *current = break_head;
+    s_LLnode *prev = NULL;
+    while ( current)
+    {
+        s_breakpoint *cur_data = current -> data;
+
+        if ( cur_data -> number == target_num)
+        {
+            // target matched
+            if ( prev == NULL)
+            {
+                // head is target
+                break_head = break_head -> next;
+            }// if
+            else
+            {
+                // bypass the about to be deleted one
+                prev -> next = current -> next;
+            }// else
+            free( current -> data);
+            current -> data = NULL;
+            current -> next = NULL;
+            free( current);
+            current = NULL;
+
+            printf("** delete breakpoint %d.\n", target_num);
+            flag = 0;
+            break;
+        }// if
+        
+        prev = current;
+        current = current -> next;
+    }// while
+    
+
+exit:
+    if ( flag)
+    {
+        printf("** breakpoint %s does not exist.\n", args[ 0]);
+    }// if
+
     return 0;
 }
 
@@ -492,13 +568,13 @@ void disassemble( unsigned long long rip)
     for ( size_t j = 0; j < ( count >= 5 ? 5: count); j += 1)
     {
         int printed = 0;
-        printed += printf("%*s%#lx:", 6, "", inst[j].address);
+        printed += printf("%*s%lx:", 6, "", inst[j].address);
         // printf("inst len: %d\n", inst[ j].size);
         for ( int i = 0; i < inst[ j].size; i += 1)
         {
             printed += printf(" %2.2x", inst[ j].bytes[ i]);
         }// for i
-        printf("%*s %s %s\n", 47 - printed, " ", inst[j].mnemonic, inst[j].op_str);
+        printf("%*s %-10s%s\n", 47 - printed, " ", inst[j].mnemonic, inst[j].op_str);
         
     }// for j
 
