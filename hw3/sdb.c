@@ -33,7 +33,7 @@ int f_patch( char *args[], int arg_count);
 int f_syscall( char *args[], int arg_count);
 int f_exit( char *args[], int arg_count);
 int shell();
-void disassemble();
+void disassemble( unsigned long long rip);
 
 
 int child_pid = 0;
@@ -205,7 +205,9 @@ int f_load( char *args[], int arg_count)
     // check for the program loaded
     if ( child_pid)
     {
-        disassemble();
+        struct user_regs_struct regs;
+        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+        disassemble( regs.rip);
     }// if
 
 exit:
@@ -234,7 +236,9 @@ int f_si( char *args[], int arg_count)
     // check for the program loaded
     if ( child_pid)
     {
-        disassemble();
+        struct user_regs_struct regs;
+        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+        disassemble( regs.rip);
     }// if
 
     return 0;
@@ -264,7 +268,9 @@ int f_cont( char *args[], int arg_count)
     // check for the program loaded
     if ( child_pid)
     {
-        disassemble();
+        struct user_regs_struct regs;
+        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+        disassemble( regs.rip);
     }// if
 
     return 0;
@@ -329,39 +335,37 @@ int f_syscall( char *args[], int arg_count)
     {
         printf("stopped by signal: %d\n", WSTOPSIG( status));
         
-        struct ptrace_syscall_info sys_info;
-        ptrace( PTRACE_GET_SYSCALL_INFO, child_pid, 0, &sys_info);
+        // struct ptrace_syscall_info sys_info;
+        // ptrace( PTRACE_GET_SYSCALL_INFO, child_pid, 0, &sys_info);
 
         struct user_regs_struct regs;
         ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
-        if ( sys_info.op == PTRACE_SYSCALL_INFO_ENTRY)
+        // printf("syscall rax: %llu\n", regs.rax);
+        if ( regs.rax == -ENOSYS)
         {
             // start of the system call
-            printf("** enter a syscall([%llu]) at [%llx].\n", sys_info.entry.nr, regs.rip);
+            printf("** enter a syscall(%llu) at %#llx.\n", regs.orig_rax, regs.rip - 2);
         }// if
         else
         {
             // end of the system call
-            printf("** leave a syscall([%llu]) = [ret] at [%llx].\n", sys_info.exit.rval, regs.rip);
+            printf("** leave a syscall(%llu) = %llu at %#llx.\n", regs.orig_rax, regs.rax, regs.rip - 2);
         }// else
-        
-
-
     }// else if
     // check for the program loaded
     if ( child_pid)
     {
-        disassemble();
+        struct user_regs_struct regs;
+        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+        // to not miss the syscall instruction
+        disassemble( regs.rip - 2);
     }// if
 
     return 0;
 }
 
-void disassemble()
+void disassemble( unsigned long long rip)
 {
-    struct user_regs_struct regs;
-    ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
-
     // code space
     // max instruction line is 15 bytes for x86_64
     uint8_t code[ 15 * 5] = { 0};
@@ -369,14 +373,12 @@ void disassemble()
     long temp;
     for ( int i = 0; i < 5; i += 1)
     {
-        temp = ptrace( PTRACE_PEEKDATA, child_pid, regs.rip + code_len, 0);
+        temp = ptrace( PTRACE_PEEKDATA, child_pid, rip + code_len, 0);
         memmove( code + code_len, &temp, sizeof(temp));
         code_len += sizeof(temp);
     }// for i
-
     
     csh cshandle = 0;
-
     if ( cs_open( CS_ARCH_X86, CS_MODE_64, &cshandle) != CS_ERR_OK)
     {
         printf("cs_open failed\n");
@@ -387,13 +389,20 @@ void disassemble()
     inst = cs_malloc( cshandle);
 
     size_t count;
-    count = cs_disasm( cshandle, code, code_len, regs.rip, 0, &inst);
+    count = cs_disasm( cshandle, code, code_len, rip, 0, &inst);
 
     for ( size_t j = 0; j < ( count >= 5 ? 5: count); j += 1)
     {
-        printf("0x%" PRIx64 ":\t%s\t%s\n", inst[j].address, inst[j].mnemonic, inst[j].op_str);
-    }// for i
-    
+        int printed = 0;
+        printed += printf("%*s%#lx:", 6, "", inst[j].address);
+        // printf("inst len: %d\n", inst[ j].size);
+        for ( int i = 0; i < inst[ j].size; i += 1)
+        {
+            printed += printf(" %2.2x", inst[ j].bytes[ i]);
+        }// for i
+        printf("%*s %s %s\n", 47 - printed, " ", inst[j].mnemonic, inst[j].op_str);
+        
+    }// for j
 
     cs_free( inst, 1);
     cs_close( &cshandle);
