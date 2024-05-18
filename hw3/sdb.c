@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <linux/ptrace.h>
 #include <signal.h>
+#include <elf.h>
 
 enum e_comtype
 {
@@ -37,9 +38,11 @@ int shell();
 void disassemble( unsigned long long rip);
 void enable_break();
 void disable_break();
+int forward( char *args[], int arg_count, int ptrace_option);
 
 
 int child_pid = 0;
+unsigned long text_max = 0;
 // breakpoint storage
 typedef struct _sLLnode
 {
@@ -177,6 +180,45 @@ int f_exit( char *args[], int arg_count)
     return 1;
 }
 
+void set_text_max( char *name)
+{
+    // reading from https://www.sco.com/developers/gabi/2000-07-17/ch5.pheader.html
+    FILE *fp = fopen( name, "rb");
+
+    Elf64_Ehdr file_header;
+    fread( &file_header, sizeof( file_header), 1, fp);
+    // printf("file header strndx: %x\n", file_header.e_shstrndx);
+
+    Elf64_Shdr section_header;
+    fseek( fp, file_header.e_shoff + file_header.e_shentsize * file_header.e_shstrndx, SEEK_SET);
+    fread( &section_header, sizeof( section_header), 1, fp);
+    // printf("names start offset: %lx\n", section_header.sh_offset);
+
+    for ( int i = 0; i < file_header.e_shnum; i += 1)
+    {
+        Elf64_Shdr temp_header;
+        fseek( fp, file_header.e_shoff + file_header.e_shentsize * i, SEEK_SET);
+        fread( &temp_header, sizeof( temp_header), 1, fp);
+
+        fseek( fp, section_header.sh_offset + temp_header.sh_name, SEEK_SET);
+        // a buffer that could hold ".text"
+        char buf[ 6] = { 0};
+        // fscanf( fp, "%5s", buf);
+        fread( buf, sizeof(char), 5, fp);
+        if ( strncmp( buf, ".text", 6) == 0)
+        {
+            // printf("temp header size with .text name: %lx\n", temp_header.sh_size);
+            text_max = temp_header.sh_addr + temp_header.sh_size;
+            break;
+        }// if
+    }// for i
+
+    fclose( fp);
+    fp = NULL;
+
+    return;
+}
+
 int f_load( char *args[], int arg_count)
 {
     int retval = 0;
@@ -203,18 +245,17 @@ int f_load( char *args[], int arg_count)
         goto exit;
     }// if
 
-    // printf("file accessable\n");
+    set_text_max( args[ 0]);
 
     int pid = fork();
-    // int pid = 2;
-    // printf("pid =>> %d\n", pid);
-
     switch ( pid)
     {
     case -1:
         // error happened on fork
         perror("child spawn error: ");
         retval = 1;
+        child_pid = 0;
+        text_max = 0;
         break;
 
     case 0:
@@ -225,6 +266,9 @@ int f_load( char *args[], int arg_count)
         // execv( args[ 0], args);
         execl( args[ 0], args[ 0], NULL);
         perror("exec error: ");
+        retval = 1;
+        child_pid = 0;
+        text_max = 0;
         break;
     
     default:
@@ -250,10 +294,80 @@ exit:
     return retval;
 }
 
+int forward( char *args[], int arg_count, int ptrace_option)
+{
+    if ( child_pid == 0)
+    {
+        printf("** please load a program first.\n");
+        goto exit;
+    }// if
+    
+    ptrace( ptrace_option, child_pid, 0, 0);
+
+    // stop this process until the return of the child
+    // could be stopping or dying child
+    int offset;
+    int status;
+    waitpid( child_pid, &status, 0);
+    if ( WIFEXITED( status))
+    {
+        // printf("child dying: %d\n", WEXITSTATUS( status));
+        printf("** the target program terminated.\n");
+        child_pid = 0;
+        text_max = 0;
+    }// if
+    else if ( WIFSTOPPED( status))
+    {
+        // printf("stopped by signal: %d\n", WSTOPSIG( status));
+        struct user_regs_struct regs;
+        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+        if ( WSTOPSIG( status) == SIGTRAP && ptrace_option != PTRACE_SYSCALL)
+        {
+            printf("** hit a breakpoint at %#llx.\n", regs.rip);
+        }// if
+        switch ( ptrace_option)
+        {
+        case PTRACE_CONT:
+            offset = 1;
+            break;
+        case PTRACE_SINGLESTEP:
+            offset = 0;
+            break;
+        case PTRACE_SYSCALL:
+            // printf("syscall rax: %llu\n", regs.rax);
+            if ( regs.rax == -ENOSYS)
+            {
+                // start of the system call
+                printf("** enter a syscall(%llu) at %#llx.\n", regs.orig_rax, regs.rip - 2);
+            }// if
+            else
+            {
+                // end of the system call
+                printf("** leave a syscall(%llu) = %llu at %#llx.\n", regs.orig_rax, regs.rax, regs.rip - 2);
+            }// else
+            offset = 2;
+            break;
+        
+        default:
+            printf("forward option error: %d\n", ptrace_option);
+            break;
+        }// switch
+    }// else if
+    // check for the program loaded
+    if ( child_pid)
+    {
+        struct user_regs_struct regs;
+        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+        disassemble( regs.rip - offset);
+    }// if
+exit:
+    return 0;
+}
+
 int f_si( char *args[], int arg_count)
 {
     // printf("*** f_si not finished ***\n");
-    if ( child_pid == 0)
+    /*if ( child_pid == 0)
     {
         printf("** please load a program first.\n");
         goto exit;
@@ -282,14 +396,23 @@ int f_si( char *args[], int arg_count)
         ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
         disassemble( regs.rip);
     }// if
+    */
+    int retval = 0;
+    if ( arg_count != 0)
+    {
+        printf("si argument count error: %d\n", arg_count);
+        goto exit;
+    }// if
+    retval = forward( args, arg_count, PTRACE_SINGLESTEP);
+
 exit:
-    return 0;
+    return retval;
 }
 
 int f_cont( char *args[], int arg_count)
 {
     // printf("*** f_cont not finished ***\n");
-    if ( child_pid == 0)
+    /*if ( child_pid == 0)
     {
         printf("** please load a program first.\n");
         goto exit;
@@ -309,6 +432,12 @@ int f_cont( char *args[], int arg_count)
     else if ( WIFSTOPPED( status))
     {
         // printf("stopped by signal: %d\n", WSTOPSIG( status));
+        if ( WSTOPSIG( status) == SIGTRAP)
+        {
+            struct user_regs_struct regs;
+            ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+            printf("** hit a breakpoint at %#llx.\n", regs.rip);
+        }// if
     }// else if
 
     // check for the program loaded
@@ -318,8 +447,72 @@ int f_cont( char *args[], int arg_count)
         ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
         disassemble( regs.rip - 1);
     }// if
+    */
+    int retval = 0;
+    if ( arg_count != 0)
+    {
+        printf("cont argument count error: %d\n", arg_count);
+        goto exit;
+    }// if
+    retval = forward( args, arg_count, PTRACE_CONT);
 exit:
-    return 0;
+    return retval;
+}
+
+int f_syscall( char *args[], int arg_count)
+{
+    /*printf("*** f_syscall not finished ***\n");
+    ptrace( PTRACE_SYSCALL, child_pid, 0, 0);
+
+    // stop this process until the return of the child
+    // could be stopping or dying child
+    int status;
+    waitpid( child_pid, &status, 0);
+    if ( WIFEXITED( status))
+    {
+        printf("child dying: %d\n", WEXITSTATUS( status));
+        printf("** the target program terminated.\n");
+        child_pid = 0;
+    }// if
+    else if ( WIFSTOPPED( status))
+    {
+        printf("stopped by signal: %d\n", WSTOPSIG( status));
+        
+        // struct ptrace_syscall_info sys_info;
+        // ptrace( PTRACE_GET_SYSCALL_INFO, child_pid, 0, &sys_info);
+
+        struct user_regs_struct regs;
+        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+        // printf("syscall rax: %llu\n", regs.rax);
+        if ( regs.rax == -ENOSYS)
+        {
+            // start of the system call
+            printf("** enter a syscall(%llu) at %#llx.\n", regs.orig_rax, regs.rip - 2);
+        }// if
+        else
+        {
+            // end of the system call
+            printf("** leave a syscall(%llu) = %llu at %#llx.\n", regs.orig_rax, regs.rax, regs.rip - 2);
+        }// else
+    }// else if
+    // check for the program loaded
+    if ( child_pid)
+    {
+        struct user_regs_struct regs;
+        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+        // to not miss the syscall instruction
+        disassemble( regs.rip - 2);
+    }// if
+    */
+    int retval = 0;
+    if ( arg_count != 0)
+    {
+        printf("syscall argument count error: %d\n", arg_count);
+        goto exit;
+    }// if
+    retval = forward( args, arg_count, PTRACE_SYSCALL);
+exit:
+    return retval;
 }
 
 int f_info( char *args[], int arg_count)
@@ -486,53 +679,6 @@ exit:
 int f_patch( char *args[], int arg_count)
 {
     printf("*** f_patch not finished ***\n");
-    return 0;
-}
-
-int f_syscall( char *args[], int arg_count)
-{
-    printf("*** f_syscall not finished ***\n");
-    ptrace( PTRACE_SYSCALL, child_pid, 0, 0);
-
-    // stop this process until the return of the child
-    // could be stopping or dying child
-    int status;
-    waitpid( child_pid, &status, 0);
-    if ( WIFEXITED( status))
-    {
-        printf("child dying: %d\n", WEXITSTATUS( status));
-        printf("** the target program terminated.\n");
-        child_pid = 0;
-    }// if
-    else if ( WIFSTOPPED( status))
-    {
-        printf("stopped by signal: %d\n", WSTOPSIG( status));
-        
-        // struct ptrace_syscall_info sys_info;
-        // ptrace( PTRACE_GET_SYSCALL_INFO, child_pid, 0, &sys_info);
-
-        struct user_regs_struct regs;
-        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
-        // printf("syscall rax: %llu\n", regs.rax);
-        if ( regs.rax == -ENOSYS)
-        {
-            // start of the system call
-            printf("** enter a syscall(%llu) at %#llx.\n", regs.orig_rax, regs.rip - 2);
-        }// if
-        else
-        {
-            // end of the system call
-            printf("** leave a syscall(%llu) = %llu at %#llx.\n", regs.orig_rax, regs.rax, regs.rip - 2);
-        }// else
-    }// else if
-    // check for the program loaded
-    if ( child_pid)
-    {
-        struct user_regs_struct regs;
-        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
-        // to not miss the syscall instruction
-        disassemble( regs.rip - 2);
-    }// if
 
     return 0;
 }
@@ -544,10 +690,9 @@ void disassemble( unsigned long long rip)
     // max instruction line is 15 bytes for x86_64
     uint8_t code[ 15 * 5] = { 0};
     int code_len = 0;
-    long temp;
     for ( int i = 0; i < 5; i += 1)
     {
-        temp = ptrace( PTRACE_PEEKTEXT, child_pid, rip + code_len, 0);
+        long temp = ptrace( PTRACE_PEEKTEXT, child_pid, rip + code_len, 0);
         memmove( code + code_len, &temp, sizeof(temp));
         code_len += sizeof(temp);
     }// for i
@@ -562,21 +707,32 @@ void disassemble( unsigned long long rip)
     cs_insn *inst;
     inst = cs_malloc( cshandle);
 
-    size_t count;
-    count = cs_disasm( cshandle, code, code_len, rip, 0, &inst);
-
-    for ( size_t j = 0; j < ( count >= 5 ? 5: count); j += 1)
+    const uint8_t *cur_code = &code[ 0];
+    size_t cur_size = code_len;
+    uint64_t addrptr = rip;
+    int counter = 0;
+    while ( cs_disasm_iter( cshandle, &cur_code, &cur_size, &addrptr, inst))
     {
-        int printed = 0;
-        printed += printf("%*s%lx:", 6, "", inst[j].address);
-        // printf("inst len: %d\n", inst[ j].size);
-        for ( int i = 0; i < inst[ j].size; i += 1)
+        if ( inst -> address >= text_max)
         {
-            printed += printf(" %2.2x", inst[ j].bytes[ i]);
+            printf("** the address is out of the range of the text section.\n");
+            break;
+        }// if
+
+        int printed = 0;
+        printed += printf("%*s%lx:", 6, "", inst -> address);
+        for ( int i = 0; i < inst -> size; i += 1)
+        {
+            printed += printf(" %2.2x", inst -> bytes[ i]);
         }// for i
-        printf("%*s %-10s%s\n", 47 - printed, " ", inst[j].mnemonic, inst[j].op_str);
+        printf("%*s %-10s%s\n", 47 - printed, " ", inst -> mnemonic, inst -> op_str);
         
-    }// for j
+        counter += 1;
+        if ( counter >= 5)
+        {
+            break;
+        }// if
+    }// while
 
     cs_free( inst, 1);
     cs_close( &cshandle);
