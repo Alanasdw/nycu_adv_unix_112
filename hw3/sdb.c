@@ -54,6 +54,7 @@ typedef struct _sbreakpoint
 {
     int number;
     unsigned long long address;
+    unsigned long long next_inst_addr;
     char orig_inst;
 } s_breakpoint;
 s_LLnode *break_head = NULL;
@@ -260,8 +261,6 @@ int f_load( char *args[], int arg_count)
 
     case 0:
         // child process
-        // printf("child\n");
-        // fflush( NULL);
         ptrace( PTRACE_TRACEME, 0, 0, 0);
         // execv( args[ 0], args);
         execl( args[ 0], args[ 0], NULL);
@@ -273,10 +272,9 @@ int f_load( char *args[], int arg_count)
     
     default:
         // parent process
-        // printf("parent\n");
         int status = 0;
         waitpid( pid, &status, 0);
-        ptrace( PTRACE_SETOPTIONS, pid, 0, PTRACE_O_EXITKILL);// | PTRACE_O_TRACEEXIT);
+        ptrace( PTRACE_SETOPTIONS, pid, 0, PTRACE_O_EXITKILL | PTRACE_O_TRACESYSGOOD);// | PTRACE_O_TRACEEXIT);
         child_pid = pid;
         break;
     }// switch
@@ -302,13 +300,15 @@ int forward( char *args[], int arg_count, int ptrace_option)
         goto exit;
     }// if
     
+    enable_break();
     ptrace( ptrace_option, child_pid, 0, 0);
 
     // stop this process until the return of the child
     // could be stopping or dying child
-    int offset;
     int status;
     waitpid( child_pid, &status, 0);
+    disable_break();
+    struct user_regs_struct regs;
     if ( WIFEXITED( status))
     {
         // printf("child dying: %d\n", WEXITSTATUS( status));
@@ -319,46 +319,68 @@ int forward( char *args[], int arg_count, int ptrace_option)
     else if ( WIFSTOPPED( status))
     {
         // printf("stopped by signal: %d\n", WSTOPSIG( status));
-        struct user_regs_struct regs;
+        int is_syscall = 0;
         ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
-        if ( WSTOPSIG( status) == SIGTRAP && ptrace_option != PTRACE_SYSCALL)
-        {
-            printf("** hit a breakpoint at %#llx.\n", regs.rip);
-        }// if
         switch ( ptrace_option)
         {
         case PTRACE_CONT:
-            offset = 1;
+            regs.rip -= 1;
+            ptrace( PTRACE_SETREGS, child_pid, 0, &regs);
             break;
         case PTRACE_SINGLESTEP:
-            offset = 0;
             break;
         case PTRACE_SYSCALL:
             // printf("syscall rax: %llu\n", regs.rax);
-            if ( regs.rax == -ENOSYS)
+            if ( WSTOPSIG( status) & 0x80)
             {
-                // start of the system call
-                printf("** enter a syscall(%llu) at %#llx.\n", regs.orig_rax, regs.rip - 2);
+                // is syscall
+                if ( regs.rax == -ENOSYS)
+                {
+                    // start of the system call
+                    printf("** enter a syscall(%llu) at %#llx.\n", regs.orig_rax, regs.rip - 2);
+                }// if
+                else
+                {
+                    // end of the system call
+                    printf("** leave a syscall(%llu) = %llu at %#llx.\n", regs.orig_rax, regs.rax, regs.rip - 2);
+                }// else
+                regs.rip -= 2;
+                is_syscall = 1;
             }// if
             else
             {
-                // end of the system call
-                printf("** leave a syscall(%llu) = %llu at %#llx.\n", regs.orig_rax, regs.rax, regs.rip - 2);
+                // printf("syscall not real syscall\n");
+                regs.rip -= 1;
+                ptrace( PTRACE_SETREGS, child_pid, 0, &regs);
             }// else
-            offset = 2;
             break;
         
         default:
             printf("forward option error: %d\n", ptrace_option);
             break;
         }// switch
+        
+        if ( WSTOPSIG( status) == SIGTRAP && !is_syscall)
+        {
+            // scan the breakpoints to check
+            s_LLnode *current = break_head;
+            while ( current)
+            {
+                s_breakpoint *data = (s_breakpoint *)current -> data;
+                if ( regs.rip == data -> address)
+                {
+                    printf("** hit a breakpoint at %#llx.\n", regs.rip);
+                    break;
+                }// if
+
+                current = current -> next;
+            }// while
+        }// if
     }// else if
     // check for the program loaded
     if ( child_pid)
     {
-        struct user_regs_struct regs;
-        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
-        disassemble( regs.rip - offset);
+        disassemble( regs.rip);
     }// if
 exit:
     return 0;
@@ -366,37 +388,6 @@ exit:
 
 int f_si( char *args[], int arg_count)
 {
-    // printf("*** f_si not finished ***\n");
-    /*if ( child_pid == 0)
-    {
-        printf("** please load a program first.\n");
-        goto exit;
-    }// if
-    
-    ptrace( PTRACE_SINGLESTEP, child_pid, 0, 0);
-
-    // stop this process until the return of the child
-    // could be stopping or dying child
-    int status;
-    waitpid( child_pid, &status, 0);
-    if ( WIFEXITED( status))
-    {
-        // printf("child dying: %d\n", WEXITSTATUS( status));
-        printf("** the target program terminated.\n");
-        child_pid = 0;
-    }// if
-    else if ( WIFSTOPPED( status))
-    {
-        // printf("stopped by signal: %d\n", WSTOPSIG( status));
-    }// else if
-    // check for the program loaded
-    if ( child_pid)
-    {
-        struct user_regs_struct regs;
-        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
-        disassemble( regs.rip);
-    }// if
-    */
     int retval = 0;
     if ( arg_count != 0)
     {
@@ -411,43 +402,6 @@ exit:
 
 int f_cont( char *args[], int arg_count)
 {
-    // printf("*** f_cont not finished ***\n");
-    /*if ( child_pid == 0)
-    {
-        printf("** please load a program first.\n");
-        goto exit;
-    }// if
-    ptrace( PTRACE_CONT, child_pid, 0, 0);
-
-    // stop this process until the return of the child
-    // could be stopping or dying child
-    int status;
-    waitpid( child_pid, &status, 0);
-    if ( WIFEXITED( status))
-    {
-        // printf("child dying: %d\n", WEXITSTATUS( status));
-        printf("** the target program terminated.\n");
-        child_pid = 0;
-    }// if
-    else if ( WIFSTOPPED( status))
-    {
-        // printf("stopped by signal: %d\n", WSTOPSIG( status));
-        if ( WSTOPSIG( status) == SIGTRAP)
-        {
-            struct user_regs_struct regs;
-            ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
-            printf("** hit a breakpoint at %#llx.\n", regs.rip);
-        }// if
-    }// else if
-
-    // check for the program loaded
-    if ( child_pid)
-    {
-        struct user_regs_struct regs;
-        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
-        disassemble( regs.rip - 1);
-    }// if
-    */
     int retval = 0;
     if ( arg_count != 0)
     {
@@ -461,49 +415,6 @@ exit:
 
 int f_syscall( char *args[], int arg_count)
 {
-    /*printf("*** f_syscall not finished ***\n");
-    ptrace( PTRACE_SYSCALL, child_pid, 0, 0);
-
-    // stop this process until the return of the child
-    // could be stopping or dying child
-    int status;
-    waitpid( child_pid, &status, 0);
-    if ( WIFEXITED( status))
-    {
-        printf("child dying: %d\n", WEXITSTATUS( status));
-        printf("** the target program terminated.\n");
-        child_pid = 0;
-    }// if
-    else if ( WIFSTOPPED( status))
-    {
-        printf("stopped by signal: %d\n", WSTOPSIG( status));
-        
-        // struct ptrace_syscall_info sys_info;
-        // ptrace( PTRACE_GET_SYSCALL_INFO, child_pid, 0, &sys_info);
-
-        struct user_regs_struct regs;
-        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
-        // printf("syscall rax: %llu\n", regs.rax);
-        if ( regs.rax == -ENOSYS)
-        {
-            // start of the system call
-            printf("** enter a syscall(%llu) at %#llx.\n", regs.orig_rax, regs.rip - 2);
-        }// if
-        else
-        {
-            // end of the system call
-            printf("** leave a syscall(%llu) = %llu at %#llx.\n", regs.orig_rax, regs.rax, regs.rip - 2);
-        }// else
-    }// else if
-    // check for the program loaded
-    if ( child_pid)
-    {
-        struct user_regs_struct regs;
-        ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
-        // to not miss the syscall instruction
-        disassemble( regs.rip - 2);
-    }// if
-    */
     int retval = 0;
     if ( arg_count != 0)
     {
@@ -524,7 +435,7 @@ int f_info( char *args[], int arg_count)
         goto exit;
     }// if
 
-    if ( arg_count == 1 && strncmp( args[ 0], "regs", strlen("regs")) == 0)
+    if ( arg_count == 1 && strncmp( args[ 0], "reg", strlen("regs")) == 0)
     {
         printf("all the registers:\n");
         struct user_regs_struct regs;
@@ -567,16 +478,14 @@ exit:
 
 int f_break( char *args[], int arg_count)
 {
-    printf("*** f_break not finished ***\n");
+    // printf("*** f_break not finished ***\n");
     unsigned long long address = strtoull( args[ 0], NULL, 16);
     if ( arg_count != 1)
     {
         goto exit;
     }// if
 
-    unsigned long long data;
-    data = ptrace( PTRACE_PEEKTEXT, child_pid, address, 0);
-    char *ptr = (char *)&data;
+    // only need to mark the breakpoints
     if ( break_head == NULL)
     {
         // new element
@@ -586,7 +495,7 @@ int f_break( char *args[], int arg_count)
         new_data -> address = address;
         new_data -> number = next_num;
         next_num += 1;
-        new_data -> orig_inst = ptr[ 0];
+        // new_data -> orig_inst = ptr[ 0];
     }// if
     else
     {
@@ -604,12 +513,10 @@ int f_break( char *args[], int arg_count)
         temp_new -> address = address;
         temp_new -> number = next_num;
         next_num += 1;
-        temp_new -> orig_inst = ptr[ 0];
+        // temp_new -> orig_inst = ptr[ 0];
     }// else
 
-    ptr[ 0] = 0xcc;
-    ptrace( PTRACE_POKETEXT, child_pid, address, data);
-    printf("breakpoint set @ %s => %llu\n", args[ 0], address);
+    printf("** set a breakpoint at %#llx.\n", address);
 
 exit:
     return 0;
@@ -617,7 +524,7 @@ exit:
 
 int f_delete( char *args[], int arg_count)
 {
-    printf("*** f_delete not finished ***\n");
+    // printf("*** f_delete not finished ***\n");
 
     int flag = 1;
     if ( arg_count != 1)
@@ -678,14 +585,54 @@ exit:
 
 int f_patch( char *args[], int arg_count)
 {
-    printf("*** f_patch not finished ***\n");
+    if ( child_pid == 0)
+    {
+        printf("** please load a program first.\n");
+        return 0;
+    }// if
+    
+    // printf("*** f_patch not finished ***\n");
+    // disable_break();
+    if ( arg_count != 3)
+    {
+        goto exit;
+    }// if
 
+    uint64_t address = 0;
+    int len = 0;
+
+    len = strtol( args[ 2], NULL, 10);
+    address = strtoull( args[ 0], NULL, 16);
+    if ( !( len == 1 || len == 2 || len == 4 || len == 8))
+    {
+        // printf("%s is not one of 1,2,4,8\n", args[ 2]);
+        goto exit;
+    }// if
+
+    unsigned long long given = strtoull( args[ 1], NULL, 16);
+    unsigned long long data;
+    data = ptrace( PTRACE_PEEKTEXT, child_pid, address, 0);
+    char *from = (char *)&given;
+    char *to = (char *)&data;
+    // printf("before: %llx\n", data);
+    for ( int i = 0; i < len; i += 1)
+    {
+        to[ i] = from[ i];
+    }// for i
+    // printf("after : %llx\n", data);
+
+    ptrace( PTRACE_POKETEXT, child_pid, address, data);
+    
+    printf("** patch memory at address %s.\n", args[ 0]);
+
+exit:
+    // enable_break();
     return 0;
 }
 
 void disassemble( unsigned long long rip)
 {
-    disable_break();
+    // disable_break();
     // code space
     // max instruction line is 15 bytes for x86_64
     uint8_t code[ 15 * 5] = { 0};
@@ -738,12 +685,16 @@ void disassemble( unsigned long long rip)
     cs_close( &cshandle);
 exit:
 
-    enable_break();
+    // enable_break();
     return;
 }
 
 void disable_break()
 {
+    struct user_regs_struct regs;
+    ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+    // printf("disable rip: %llx\n", regs.rip);
+
     s_LLnode *current = break_head;
     while ( current)
     {
@@ -765,18 +716,27 @@ void disable_break()
 
 void enable_break()
 {
+    struct user_regs_struct regs;
+    ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
+    // printf("enable rip: %llx\n", regs.rip);
+
     s_LLnode *current = break_head;
     while ( current)
     {
         s_breakpoint *cur_data = (s_breakpoint *)current -> data;
 
-        unsigned long long code = 0;
-        code = ptrace( PTRACE_PEEKTEXT, child_pid, cur_data -> address, 0);
-        // printf("before enable: %llx\n", code);
-        char *ptr = (char *)&code;
-        ptr[ 0] = 0xcc;
-        ptrace( PTRACE_POKETEXT, child_pid, cur_data -> address, code);
-        // printf("enabled to:    %llx\n", code);
+        // dont patch back the ones that are next
+        if ( cur_data -> address != regs.rip)
+        {
+            unsigned long long code = 0;
+            code = ptrace( PTRACE_PEEKTEXT, child_pid, cur_data -> address, 0);
+            // printf("before enable: %llx\n", code);
+            char *ptr = (char *)&code;
+            cur_data -> orig_inst = ptr[ 0];
+            ptr[ 0] = 0xcc;
+            ptrace( PTRACE_POKETEXT, child_pid, cur_data -> address, code);
+            // printf("enabled to:    %llx\n", code);
+        }// if
 
         cur_data = NULL;
         current = current -> next;
