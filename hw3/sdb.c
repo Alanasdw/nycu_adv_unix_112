@@ -182,6 +182,9 @@ int f_exit( char *args[], int arg_count)
         free( break_head);
         break_head = NULL;
     }// if
+    child_pid = 0;
+    text_max = 0;
+    next_num = 0;
 
     return 1;
 }
@@ -232,6 +235,11 @@ int f_load( char *args[], int arg_count)
     if ( child_pid)
     {
         kill( child_pid, SIGKILL);
+    }// if
+    if ( break_head != NULL)
+    {
+        // clean all things
+        f_exit( NULL, 0);
     }// if
 
     // check file access
