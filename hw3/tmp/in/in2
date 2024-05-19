@@ -11,3 +11,4 @@ info break
 cont
 patch 0x402015 0x4e49570a 4
 cont
+exit

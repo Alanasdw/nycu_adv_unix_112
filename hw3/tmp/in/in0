@@ -3,3 +3,4 @@ load ./hello
 si
 si
 cont
+exit
