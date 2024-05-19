@@ -25,6 +25,12 @@ enum e_comtype
     COMTYPE_COUNT
 };
 
+typedef union _ucode
+{
+    uint64_t whole;
+    char bytes[ 8];
+} u_code;
+
 int f_load( char *args[], int arg_count);
 int f_si( char *args[], int arg_count);
 int f_cont( char *args[], int arg_count);
@@ -54,7 +60,6 @@ typedef struct _sbreakpoint
 {
     int number;
     unsigned long long address;
-    unsigned long long next_inst_addr;
     char orig_inst;
 } s_breakpoint;
 s_LLnode *break_head = NULL;
@@ -609,19 +614,23 @@ int f_patch( char *args[], int arg_count)
         goto exit;
     }// if
 
-    unsigned long long given = strtoull( args[ 1], NULL, 16);
-    unsigned long long data;
-    data = ptrace( PTRACE_PEEKTEXT, child_pid, address, 0);
-    char *from = (char *)&given;
-    char *to = (char *)&data;
+    u_code given = { 0};
+    // unsigned long long given = strtoull( args[ 1], NULL, 16);
+    given.whole = strtoull( args[ 1], NULL, 16);
+    u_code data = { 0};
+    // unsigned long long data;
+    data.whole = ptrace( PTRACE_PEEKTEXT, child_pid, address, 0);
+    // char *from = (char *)&given;
+    // char *to = (char *)&data;
     // printf("before: %llx\n", data);
     for ( int i = 0; i < len; i += 1)
     {
-        to[ i] = from[ i];
+        // to[ i] = from[ i];
+        data.bytes[ i] = given.bytes[ i];
     }// for i
     // printf("after : %llx\n", data);
 
-    ptrace( PTRACE_POKETEXT, child_pid, address, data);
+    ptrace( PTRACE_POKETEXT, child_pid, address, data.whole);
     
     printf("** patch memory at address %s.\n", args[ 0]);
 
@@ -700,12 +709,11 @@ void disable_break()
     {
         s_breakpoint *cur_data = (s_breakpoint *)current -> data;
 
-        unsigned long long code = 0;
-        code = ptrace( PTRACE_PEEKTEXT, child_pid, cur_data -> address, 0);
+        u_code code = { 0};
+        code.whole = ptrace( PTRACE_PEEKTEXT, child_pid, cur_data -> address, 0);
         // printf("before disable: %llx\n", code);
-        char *ptr = (char *)&code;
-        ptr[ 0] = cur_data -> orig_inst;
-        ptrace( PTRACE_POKETEXT, child_pid, cur_data -> address, code);
+        code.bytes[ 0] = cur_data -> orig_inst;
+        ptrace( PTRACE_POKETEXT, child_pid, cur_data -> address, code.whole);
         // printf("disabled to:    %llx\n", code);
         cur_data = NULL;
         current = current -> next;
@@ -728,13 +736,16 @@ void enable_break()
         // dont patch back the ones that are next
         if ( cur_data -> address != regs.rip)
         {
-            unsigned long long code = 0;
-            code = ptrace( PTRACE_PEEKTEXT, child_pid, cur_data -> address, 0);
+            u_code code = { 0};
+            // unsigned long long code = 0;
+            code.whole = ptrace( PTRACE_PEEKTEXT, child_pid, cur_data -> address, 0);
             // printf("before enable: %llx\n", code);
-            char *ptr = (char *)&code;
-            cur_data -> orig_inst = ptr[ 0];
-            ptr[ 0] = 0xcc;
-            ptrace( PTRACE_POKETEXT, child_pid, cur_data -> address, code);
+            // char *ptr = (char *)&code;
+            // cur_data -> orig_inst = ptr[ 0];
+            // ptr[ 0] = 0xcc;
+            cur_data -> orig_inst = code.bytes[ 0];
+            code.bytes[ 0] = 0xcc;
+            ptrace( PTRACE_POKETEXT, child_pid, cur_data -> address, code.whole);
             // printf("enabled to:    %llx\n", code);
         }// if
 
