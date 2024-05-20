@@ -473,7 +473,7 @@ int f_info( char *args[], int arg_count)
 
     if ( arg_count == 1 && strncmp( args[ 0], "reg", strlen("regs")) == 0)
     {
-        printf("all the registers:\n");
+        // printf("all the registers:\n");
         struct user_regs_struct regs;
         ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
 
@@ -712,7 +712,18 @@ void disassemble( unsigned long long rip)
         {
             printed += printf(" %2.2x", inst -> bytes[ i]);
         }// for i
-        printf("%*s %-10s%s\n", 47 - printed, " ", inst -> mnemonic, inst -> op_str);
+        printed += printf("%*s%s", 48 - printed, " ", inst -> mnemonic);
+
+        // adding this for better arrangement
+        if ( strlen( inst -> op_str))
+        {
+            printf("%*s%s\n", 58 - printed, " ", inst -> op_str);
+        }// if
+        else
+        {
+            printf("\n");
+        }// else
+        
         
         counter += 1;
         if ( counter >= 5)
