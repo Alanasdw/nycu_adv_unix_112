@@ -49,6 +49,7 @@ int forward( char *args[], int arg_count, int ptrace_option);
 
 int child_pid = 0;
 unsigned long text_max = 0;
+int enter_syscall = 0;
 // breakpoint storage
 typedef struct _sLLnode
 {
@@ -185,6 +186,7 @@ int f_exit( char *args[], int arg_count)
     child_pid = 0;
     text_max = 0;
     next_num = 0;
+    enter_syscall = 0;
 
     return 1;
 }
@@ -217,7 +219,8 @@ void set_text_max( char *name)
         if ( strncmp( buf, ".text", 6) == 0)
         {
             // printf("temp header size with .text name: %lx\n", temp_header.sh_size);
-            text_max = temp_header.sh_addr + temp_header.sh_size;
+            text_max = temp_header.sh_size;// + temp_header.sh_addr;
+            // text_max = INT64_MAX;
             break;
         }// if
     }// for i
@@ -298,6 +301,7 @@ int f_load( char *args[], int arg_count)
         struct user_regs_struct regs;
         ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
         printf("** program '%s' loaded. entry point %#llx.\n", args[ 0], regs.rip);
+        text_max += regs.rip;
         disassemble( regs.rip);
     }// if
 
@@ -313,14 +317,26 @@ int forward( char *args[], int arg_count, int ptrace_option)
         goto exit;
     }// if
     
-    enable_break();
-    ptrace( ptrace_option, child_pid, 0, 0);
-
-    // stop this process until the return of the child
-    // could be stopping or dying child
     int status;
-    waitpid( child_pid, &status, 0);
-    disable_break();
+    // for the case that the same breakpoint will be hit consecutivly
+    if ( !enter_syscall)
+    {
+        // syscall will not hit same place
+        ptrace( PTRACE_SINGLESTEP, child_pid, 0, 0);
+        waitpid( child_pid, &status, 0);
+    }// if
+    
+    if ( !WIFEXITED( status) && ( ptrace_option == PTRACE_CONT || ptrace_option == PTRACE_SYSCALL))
+    {
+        enable_break();
+        ptrace( ptrace_option, child_pid, 0, 0);
+
+        // stop this process until the return of the child
+        // could be stopping or dying child
+        waitpid( child_pid, &status, 0);
+        disable_break();
+    }// if
+
     struct user_regs_struct regs;
     if ( WIFEXITED( status))
     {
@@ -332,22 +348,29 @@ int forward( char *args[], int arg_count, int ptrace_option)
     else if ( WIFSTOPPED( status))
     {
         // printf("stopped by signal: %d\n", WSTOPSIG( status));
-        int is_syscall = 0;
         ptrace( PTRACE_GETREGS, child_pid, 0, &regs);
         switch ( ptrace_option)
         {
         case PTRACE_CONT:
             regs.rip -= 1;
             ptrace( PTRACE_SETREGS, child_pid, 0, &regs);
+            if ( enter_syscall == 1)
+            {
+                enter_syscall = 0;
+            }// if
             break;
         case PTRACE_SINGLESTEP:
+            if ( enter_syscall == 1)
+            {
+                enter_syscall = 0;
+            }// if
             break;
         case PTRACE_SYSCALL:
             // printf("syscall rax: %llu\n", regs.rax);
             if ( WSTOPSIG( status) & 0x80)
             {
                 // is syscall
-                if ( regs.rax == -ENOSYS)
+                if ( !enter_syscall)
                 {
                     // start of the system call
                     printf("** enter a syscall(%llu) at %#llx.\n", regs.orig_rax, regs.rip - 2);
@@ -358,7 +381,7 @@ int forward( char *args[], int arg_count, int ptrace_option)
                     printf("** leave a syscall(%llu) = %llu at %#llx.\n", regs.orig_rax, regs.rax, regs.rip - 2);
                 }// else
                 regs.rip -= 2;
-                is_syscall = 1;
+                enter_syscall ^= 0x01;
             }// if
             else
             {
@@ -373,7 +396,7 @@ int forward( char *args[], int arg_count, int ptrace_option)
             break;
         }// switch
         
-        if ( WSTOPSIG( status) == SIGTRAP && !is_syscall)
+        if ( WSTOPSIG( status) == SIGTRAP && !enter_syscall)
         {
             // scan the breakpoints to check
             s_LLnode *current = break_head;
@@ -742,20 +765,16 @@ void enable_break()
         s_breakpoint *cur_data = (s_breakpoint *)current -> data;
 
         // dont patch back the ones that are next
-        if ( cur_data -> address != regs.rip)
-        {
+        // if ( cur_data -> address != regs.rip)
+        // {
             u_code code = { 0};
-            // unsigned long long code = 0;
             code.whole = ptrace( PTRACE_PEEKTEXT, child_pid, cur_data -> address, 0);
             // printf("before enable: %llx\n", code);
-            // char *ptr = (char *)&code;
-            // cur_data -> orig_inst = ptr[ 0];
-            // ptr[ 0] = 0xcc;
             cur_data -> orig_inst = code.bytes[ 0];
             code.bytes[ 0] = 0xcc;
             ptrace( PTRACE_POKETEXT, child_pid, cur_data -> address, code.whole);
             // printf("enabled to:    %llx\n", code);
-        }// if
+        // }// if
 
         cur_data = NULL;
         current = current -> next;
