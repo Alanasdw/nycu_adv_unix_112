@@ -1,0 +1,21 @@
+break 0x401635
+cont
+cont
+cont
+cont
+cont
+cont
+syscall
+syscall
+syscall
+syscall
+syscall
+syscall
+syscall
+cont
+syscall
+syscall
+cont
+cont
+cont
+exit

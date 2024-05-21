@@ -1,0 +1,141 @@
+** program './print_times' loaded. entry point 0x4014f0.
+      4014f0: 31 ed                             xor       ebp, ebp
+      4014f2: 49 89 d1                          mov       r9, rdx
+      4014f5: 5e                                pop       rsi
+      4014f6: 48 89 e2                          mov       rdx, rsp
+      4014f9: 48 83 e4 f0                       and       rsp, 0xfffffffffffffff0
+(sdb) break 0x401635
+** set a breakpoint at 0x401635.
+(sdb) cont
+** hit a breakpoint at 0x401635.
+      401635: b8 00 00 00 00                    mov       eax, 0
+      40163a: e8 61 89 00 00                    call      0x409fa0
+      40163f: 83 45 fc 01                       add       dword ptr [rbp - 4], 1
+      401643: 83 7d fc 09                       cmp       dword ptr [rbp - 4], 9
+      401647: 7e dd                             jle       0x401626
+(sdb) cont
+times: 0
+** hit a breakpoint at 0x401635.
+      401635: b8 00 00 00 00                    mov       eax, 0
+      40163a: e8 61 89 00 00                    call      0x409fa0
+      40163f: 83 45 fc 01                       add       dword ptr [rbp - 4], 1
+      401643: 83 7d fc 09                       cmp       dword ptr [rbp - 4], 9
+      401647: 7e dd                             jle       0x401626
+(sdb) cont
+times: 1
+** hit a breakpoint at 0x401635.
+      401635: b8 00 00 00 00                    mov       eax, 0
+      40163a: e8 61 89 00 00                    call      0x409fa0
+      40163f: 83 45 fc 01                       add       dword ptr [rbp - 4], 1
+      401643: 83 7d fc 09                       cmp       dword ptr [rbp - 4], 9
+      401647: 7e dd                             jle       0x401626
+(sdb) cont
+times: 2
+** hit a breakpoint at 0x401635.
+      401635: b8 00 00 00 00                    mov       eax, 0
+      40163a: e8 61 89 00 00                    call      0x409fa0
+      40163f: 83 45 fc 01                       add       dword ptr [rbp - 4], 1
+      401643: 83 7d fc 09                       cmp       dword ptr [rbp - 4], 9
+      401647: 7e dd                             jle       0x401626
+(sdb) cont
+times: 3
+** hit a breakpoint at 0x401635.
+      401635: b8 00 00 00 00                    mov       eax, 0
+      40163a: e8 61 89 00 00                    call      0x409fa0
+      40163f: 83 45 fc 01                       add       dword ptr [rbp - 4], 1
+      401643: 83 7d fc 09                       cmp       dword ptr [rbp - 4], 9
+      401647: 7e dd                             jle       0x401626
+(sdb) cont
+times: 4
+** hit a breakpoint at 0x401635.
+      401635: b8 00 00 00 00                    mov       eax, 0
+      40163a: e8 61 89 00 00                    call      0x409fa0
+      40163f: 83 45 fc 01                       add       dword ptr [rbp - 4], 1
+      401643: 83 7d fc 09                       cmp       dword ptr [rbp - 4], 9
+      401647: 7e dd                             jle       0x401626
+(sdb) syscall
+** enter a syscall(1) at 0x437f5e.
+      437f5e: 0f 05                             syscall
+      437f60: 48 3d 00 f0 ff ff                 cmp       rax, -0x1000
+      437f66: 77 58                             ja        0x437fc0
+      437f68: c3                                ret
+      437f69: 0f 1f 80 00 00 00 00              nop       dword ptr [rax]
+(sdb) syscall
+times: 5
+** leave a syscall(1) = 9 at 0x437f5e.
+      437f5e: 0f 05                             syscall
+      437f60: 48 3d 00 f0 ff ff                 cmp       rax, -0x1000
+      437f66: 77 58                             ja        0x437fc0
+      437f68: c3                                ret
+      437f69: 0f 1f 80 00 00 00 00              nop       dword ptr [rax]
+(sdb) syscall
+** hit a breakpoint at 0x401635.
+      401635: b8 00 00 00 00                    mov       eax, 0
+      40163a: e8 61 89 00 00                    call      0x409fa0
+      40163f: 83 45 fc 01                       add       dword ptr [rbp - 4], 1
+      401643: 83 7d fc 09                       cmp       dword ptr [rbp - 4], 9
+      401647: 7e dd                             jle       0x401626
+(sdb) syscall
+** enter a syscall(1) at 0x437f5e.
+      437f5e: 0f 05                             syscall
+      437f60: 48 3d 00 f0 ff ff                 cmp       rax, -0x1000
+      437f66: 77 58                             ja        0x437fc0
+      437f68: c3                                ret
+      437f69: 0f 1f 80 00 00 00 00              nop       dword ptr [rax]
+(sdb) syscall
+times: 6
+** leave a syscall(1) = 9 at 0x437f5e.
+      437f5e: 0f 05                             syscall
+      437f60: 48 3d 00 f0 ff ff                 cmp       rax, -0x1000
+      437f66: 77 58                             ja        0x437fc0
+      437f68: c3                                ret
+      437f69: 0f 1f 80 00 00 00 00              nop       dword ptr [rax]
+(sdb) syscall
+** hit a breakpoint at 0x401635.
+      401635: b8 00 00 00 00                    mov       eax, 0
+      40163a: e8 61 89 00 00                    call      0x409fa0
+      40163f: 83 45 fc 01                       add       dword ptr [rbp - 4], 1
+      401643: 83 7d fc 09                       cmp       dword ptr [rbp - 4], 9
+      401647: 7e dd                             jle       0x401626
+(sdb) syscall
+** enter a syscall(1) at 0x437f5e.
+      437f5e: 0f 05                             syscall
+      437f60: 48 3d 00 f0 ff ff                 cmp       rax, -0x1000
+      437f66: 77 58                             ja        0x437fc0
+      437f68: c3                                ret
+      437f69: 0f 1f 80 00 00 00 00              nop       dword ptr [rax]
+(sdb) cont
+times: 7
+** hit a breakpoint at 0x401635.
+      401635: b8 00 00 00 00                    mov       eax, 0
+      40163a: e8 61 89 00 00                    call      0x409fa0
+      40163f: 83 45 fc 01                       add       dword ptr [rbp - 4], 1
+      401643: 83 7d fc 09                       cmp       dword ptr [rbp - 4], 9
+      401647: 7e dd                             jle       0x401626
+(sdb) syscall
+** enter a syscall(1) at 0x437f5e.
+      437f5e: 0f 05                             syscall
+      437f60: 48 3d 00 f0 ff ff                 cmp       rax, -0x1000
+      437f66: 77 58                             ja        0x437fc0
+      437f68: c3                                ret
+      437f69: 0f 1f 80 00 00 00 00              nop       dword ptr [rax]
+(sdb) syscall
+times: 8
+** leave a syscall(1) = 9 at 0x437f5e.
+      437f5e: 0f 05                             syscall
+      437f60: 48 3d 00 f0 ff ff                 cmp       rax, -0x1000
+      437f66: 77 58                             ja        0x437fc0
+      437f68: c3                                ret
+      437f69: 0f 1f 80 00 00 00 00              nop       dword ptr [rax]
+(sdb) cont
+** hit a breakpoint at 0x401635.
+      401635: b8 00 00 00 00                    mov       eax, 0
+      40163a: e8 61 89 00 00                    call      0x409fa0
+      40163f: 83 45 fc 01                       add       dword ptr [rbp - 4], 1
+      401643: 83 7d fc 09                       cmp       dword ptr [rbp - 4], 9
+      401647: 7e dd                             jle       0x401626
+(sdb) cont
+times: 9
+** the target program terminated.
+(sdb) cont
+** please load a program first.
