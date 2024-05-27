@@ -36,6 +36,7 @@ else:
     mov rax, 0x1
     syscall
 """
+
 codes = """
     xor rax, rax
     push rax
