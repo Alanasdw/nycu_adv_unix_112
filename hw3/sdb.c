@@ -663,7 +663,7 @@ int f_patch( char *args[], int arg_count)
 
     ptrace( PTRACE_POKETEXT, child_pid, address, data.whole);
     
-    printf("** patch memory at address %s.\n", args[ 0]);
+    printf("** patch memory at address %#lx.\n", address);
 
 exit:
     // enable_break();
