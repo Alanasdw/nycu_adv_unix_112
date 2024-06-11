@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    
+    
+    <meta name="description" content="UP24 Lab02 (Pre-Lab Announcement) ================================= Date: 2024-02-27  [TOC]  # Imple">
+    
+    <title>UP24 Lab02 (Pre-Lab Announcement) - CodiMD</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  
+    <link rel="stylesheet" href='/build/emojify.js/dist/css/basic/emojify.min.css'>
+    <link rel="stylesheet" href='/css/font.css'>
+    <link rel="stylesheet" href='/build/fork-awesome/css/fork-awesome.min.css'>
+    <link href="/build/pretty-styles-pack.css" rel="stylesheet"><link href="/build/pretty-styles.css" rel="stylesheet"><link href="/build/pretty.css" rel="stylesheet">
+  
+</head>
+
+<body style="display:none;">
+    <div class="ui-infobar container-fluid unselectable hidden-print">
+        <small>
+            <span>
+                
+                    <span class="ui-lastchangeuser">&thinsp;<i class="ui-user-icon small" style="background-image: url(https://www.gravatar.com/avatar/ba697a8cdef37153799f6a9016c0bdc6?s=96);" data-toggle="tooltip" data-placement="right" title="up112"></i></span>
+                
+                &nbsp;<span class="text-uppercase ui-status-lastchange"></span>
+                <span class="ui-lastchange text-uppercase" data-createtime="Tue Feb 27 2024 06:03:03 GMT+0000 (Coordinated Universal Time)" data-updatetime="Mon Mar 04 2024 06:47:24 GMT+0000 (Coordinated Universal Time)"></span>
+            </span>
+            <span class="pull-right">1079 views <a href="#" class="ui-edit" title="Edit this note"><i class="fa fa-fw fa-pencil"></i></a></span>
+            <br>
+            
+        </small>
+    </div>
+    <div id="doc" class="container markdown-body">UP24 Lab02 (Pre-Lab Announcement)
+=================================
+Date: 2024-02-27
+
+[TOC]
+
+# Implement a Kernel Module
+
+Our next lab is to practice implementing a kernel module. The details will be announced next week. Before you play with our lab next week, here are some hints for you to prepare before our lab officially announced.
+
+## Preparation
+
+You may not have experience in implementing a kernel module. Before you start your implementation, you may read some relevant kernel documents and tutorials.
+
+- Please check the `file+stdio` course slide and read the `hellomod` example to see how a simple kernel module is implemented.
+- The [Linux kernel documentation](https://www.kernel.org/doc/html/latest/), including
+   - [ioctl based interface](https://www.kernel.org/doc/html/latest/driver-api/ioctl.html) 
+   - [Memory allocation guide](https://www.kernel.org/doc/html/latest/core-api/memory-allocation.html)
+   - [Memory management APIs](https://www.kernel.org/doc/html/latest/core-api/mm-api.html)
+
+Our development package (including runtime and development files) can be found [here (dist-6.6.17.tbz)](https://up.zoolab.org/unixprog/lab02/dist-6.6.17.tbz). You may download and play with it before our lab officially starts. Updated `hellomod` codes is also provided [here (hellomod-6.6.17.tbz)](https://up.zoolab.org/unixprog/lab02/hellomod-6.6.17.tbz) for you.
+
+The runtime contains a pre-built Linux kernel, a root filesystem, the modules required to build a module, and a script to boot the system with the QEMU emulator. To boot the sysetem, unpack the `dist` tarball and run the `qemu.sh` command.
+
+You can develop the module on Apple chip macs but note that all the files must be cross-compiled to x86_64 architecture. We have created another docker-based runtime for you to build a cross-compilation environment for UNIX-based environment (Mac OS or WSL). You may download the files from [here (crossbuild.tbz)](https://up.zoolab.org/unixprog/lab02/crossbuild.tbz). To run the runtime, please follow the steps below.
+
+1. Unpack `crossbuild.tbz`, a `corssbuild` directory will be created with a build script and `Dockerfile`.
+
+1. run `build.sh` in the `crossbuild` directory, a docker images called `chuang/build` will be created.
+
+1. To compile your codes, ensure that you have the environment variables `UID` and `GID` setting to the user id and group id of the current user. Then, switch to your working directory and run the command:
+
+   ```
+   docker run -it --rm --user &#34;$UID:$GID&#34; -v &#34;`pwd`:/build&#34; -w /build -e PS1=&#34;buildenv:\w\$ &#34; chuang/crossbuild /bin/bash --norc
+   ```
+
+    You can then cross-compile x86-64 binaries using the compiler `x86_64-linux-gnu-gcc` to compile and generate binaries running on x86-64 platform.
+
+   :::warning
+   The cross-compilation command for building x86 modules on arm64 is `make ARCH=x86 CROSS_COMPILE=x86_64-linux-gnu-`
+   :::
+   
+:::info
+Our course video `file+stdio` has introduced how `ioctl` works with a kernel module. This lab extends it by implementing more features in the kernel module.
+:::
+</div>
+    <div class="ui-toc dropup unselectable hidden-print" style="display:none;">
+        <div class="pull-right dropdown">
+            <a id="tocLabel" class="ui-toc-label btn btn-default" data-toggle="dropdown" href="#" role="button" aria-haspopup="true" aria-expanded="false" title="Table of content">
+                <i class="fa fa-bars"></i>
+            </a>
+            <ul id="ui-toc" class="ui-toc-dropdown dropdown-menu" aria-labelledby="tocLabel">
+            </ul>
+        </div>
+    </div>
+    <div id="ui-toc-affix" class="ui-affix-toc ui-toc-dropdown unselectable hidden-print" data-spy="affix" style="display:none;"></div>
+    
+</body>
+
+</html>
+<script src="/js/mathjax-config-extra.js"></script>
+
+<script src="/build/MathJax/MathJax.js" defer></script>
+<script src="/build/MathJax/config/TeX-AMS-MML_HTMLorMML.js" defer></script>
+<script src="/build/MathJax/config/Safe.js" defer></script>
+<script src="/config"></script><script src="/build/common.1349a0316c4d8448fc8a.js" defer="defer"></script><script src="/build/pretty-pack.7d6d83ca1bdc20fcbeac.js" defer="defer"></script>
+
+
+
