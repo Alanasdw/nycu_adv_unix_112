@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    
+    
+    <meta name="description" content="# UP24 HW3 Hidden case [TOC]  ## Setup  - Download testcase file from [here](https://up.zoolab.org/u">
+    
+    <title>UP24 HW3 Hidden case - CodiMD</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  
+    <link rel="stylesheet" href='/build/emojify.js/dist/css/basic/emojify.min.css'>
+    <link rel="stylesheet" href='/css/font.css'>
+    <link rel="stylesheet" href='/build/fork-awesome/css/fork-awesome.min.css'>
+    <link href="/build/pretty-styles-pack.css" rel="stylesheet"><link href="/build/pretty-styles.css" rel="stylesheet"><link href="/build/pretty.css" rel="stylesheet">
+  
+</head>
+
+<body style="display:none;">
+    <div class="ui-infobar container-fluid unselectable hidden-print">
+        <small>
+            <span>
+                
+                    <span class="ui-lastchangeuser">&thinsp;<i class="ui-user-icon small" style="background-image: url(https://www.gravatar.com/avatar/ba697a8cdef37153799f6a9016c0bdc6?s=96);" data-toggle="tooltip" data-placement="right" title="up112"></i></span>
+                
+                &nbsp;<span class="text-uppercase ui-status-lastchange"></span>
+                <span class="ui-lastchange text-uppercase" data-createtime="Wed May 29 2024 12:38:33 GMT+0000 (Coordinated Universal Time)" data-updatetime="Mon Jun 03 2024 03:46:02 GMT+0000 (Coordinated Universal Time)"></span>
+            </span>
+            <span class="pull-right">144 views <a href="#" class="ui-edit" title="Edit this note"><i class="fa fa-fw fa-pencil"></i></a></span>
+            <br>
+            
+        </small>
+    </div>
+    <div id="doc" class="container markdown-body"># UP24 HW3 Hidden case
+[TOC]
+
+## Setup
+
+- Download testcase file from [here](https://up.zoolab.org/unixprog/hw03/hw3_testcase.zip).
+- Unzip `hw3_testcase.zip`
+
+- Make your program and move `sdb` into `hw3_testcase` folder.
+```
+hw3_testncase/
+|-- test_case
+|   |-- in
+|   |   |-- 1.in
+|   |   |-- 2.in
+|   |   |-- ...
+|   |-- out
+|   |   |-- 1.ans
+|   |   |-- 2.ans
+|   |   |-- ...
+|   |-- run.py
+|   |-- hello
+|   |-- guess
+|   |-- deep
+|   `-- game
+`-- sdb
+```
+- Run `cd hw3_testcase/test_case`
+- Use `run.py` script to run each test case
+- test case ID: 
+    - example case ID: 1, 2, 3, 4
+    - hidden case ID: h1, h2, h3, h4, h5, h6
+```
+usage: python3 ./run.py [test case id]
+```
+
+
+## Hidden Case 1
+
+- input: `./sdb ./game`
+
+```
+break 401005
+break 401009
+info break
+syscall
+syscall
+delete 0
+cont
+2
+break 401005
+info break
+cont
+2
+```
+- output
+
+```
+** program &#39;./game&#39; loaded. entry point 0x401000.
+      401000: b9 05 00 00 00                    mov       ecx, 5
+      401005: 48 83 f9 00                       cmp       rcx, 0
+      401009: 74 1f                             je        0x40102a
+      40100b: e8 2b 00 00 00                    call      0x40103b
+      401010: e8 5c 00 00 00                    call      0x401071
+(sdb) break 401005
+** set a breakpoint at 0x401005.
+(sdb) break 401009
+** set a breakpoint at 0x401009.
+(sdb) info break
+Num     Address
+0       0x401005
+1       0x401009
+(sdb) syscall
+** hit a breakpoint at 0x401005.
+      401005: 48 83 f9 00                       cmp       rcx, 0
+      401009: 74 1f                             je        0x40102a
+      40100b: e8 2b 00 00 00                    call      0x40103b
+      401010: e8 5c 00 00 00                    call      0x401071
+      401015: e8 72 00 00 00                    call      0x40108c
+(sdb) syscall
+** hit a breakpoint at 0x401009.
+      401009: 74 1f                             je        0x40102a
+      40100b: e8 2b 00 00 00                    call      0x40103b
+      401010: e8 5c 00 00 00                    call      0x401071
+      401015: e8 72 00 00 00                    call      0x40108c
+      40101a: 48 83 f8 01                       cmp       rax, 1
+(sdb) delete 0
+** delete breakpoint 0.
+(sdb) cont
+guess a number : 
+2
+wrong
+** hit a breakpoint at 0x401009.
+      401009: 74 1f                             je        0x40102a
+      40100b: e8 2b 00 00 00                    call      0x40103b
+      401010: e8 5c 00 00 00                    call      0x401071
+      401015: e8 72 00 00 00                    call      0x40108c
+      40101a: 48 83 f8 01                       cmp       rax, 1
+(sdb) break 401005
+** set a breakpoint at 0x401005.
+(sdb) info break
+Num     Address
+1       0x401009
+2       0x401005
+(sdb) cont
+guess a number : 
+2
+wrong
+** hit a breakpoint at 0x401005.
+      401005: 48 83 f9 00                       cmp       rcx, 0
+      401009: 74 1f                             je        0x40102a
+      40100b: e8 2b 00 00 00                    call      0x40103b
+      401010: e8 5c 00 00 00                    call      0x401071
+      401015: e8 72 00 00 00                    call      0x40108c
+```
+
+## Hidden Case 2
+- input `./sdb ./game`
+
+```
+** program &#39;./game&#39; loaded. entry point 0x401000.
+      401000: b9 05 00 00 00                    mov       ecx, 5
+      401005: 48 83 f9 00                       cmp       rcx, 0
+      401009: 74 1f                             je        0x40102a
+      40100b: e8 2b 00 00 00                    call      0x40103b
+      401010: e8 5c 00 00 00                    call      0x401071
+(sdb) break 401005
+** set a breakpoint at 0x401005.
+(sdb) cont
+** hit a breakpoint at 0x401005.
+      401005: 48 83 f9 00                       cmp       rcx, 0
+      401009: 74 1f                             je        0x40102a
+      40100b: e8 2b 00 00 00                    call      0x40103b
+      401010: e8 5c 00 00 00                    call      0x401071
+      401015: e8 72 00 00 00                    call      0x40108c
+(sdb) patch 40101a 0x02f88348 4
+** patch memory at address 0x40101a.
+(sdb) cont
+guess a number : 
+1
+wrong
+** hit a breakpoint at 0x401005.
+      401005: 48 83 f9 00                       cmp       rcx, 0
+      401009: 74 1f                             je        0x40102a
+      40100b: e8 2b 00 00 00                    call      0x40103b
+      401010: e8 5c 00 00 00                    call      0x401071
+      401015: e8 72 00 00 00                    call      0x40108c
+(sdb) patch 40101a 0x01f88348 4
+** patch memory at address 0x40101a.
+(sdb) cont
+guess a number : 
+1
+you win
+** the target program terminated.
+```
+
+## Hidden Case 3
+- input: `./sdb`
+```
+si
+load ./deep
+si
+si
+cont
+```
+
+- output
+```
+(sdb) si
+** please load a program first.
+(sdb) load ./deep
+** program &#39;./deep&#39; loaded. entry point 0x401131.
+      401131: f3 0f 1e fa                       endbr64   
+      401135: 55                                push      rbp
+      401136: 48 89 e5                          mov       rbp, rsp
+      401139: 48 83 ec 10                       sub       rsp, 0x10
+      40113d: b8 00 00 00 00                    mov       eax, 0
+(sdb) si
+      401135: 55                                push      rbp
+      401136: 48 89 e5                          mov       rbp, rsp
+      401139: 48 83 ec 10                       sub       rsp, 0x10
+      40113d: b8 00 00 00 00                    mov       eax, 0
+      401142: e8 3f ff ff ff                    call      0x401086
+(sdb) si
+      401136: 48 89 e5                          mov       rbp, rsp
+      401139: 48 83 ec 10                       sub       rsp, 0x10
+      40113d: b8 00 00 00 00                    mov       eax, 0
+      401142: e8 3f ff ff ff                    call      0x401086
+      401147: 89 45 fc                          mov       dword ptr [rbp - 4], eax
+(sdb) cont
+this is callee
+hello world
+hello unix
+** the target program terminated.
+```
+## Hidden Case 4
+- input: `./sdb ./deep`
+```
+break 401136
+break 40113d
+info break
+si
+si
+cont
+info reg
+cont
+```
+
+- output
+
+```
+** program &#39;./deep&#39; loaded. entry point 0x401131.
+      401131: f3 0f 1e fa                       endbr64   
+      401135: 55                                push      rbp
+      401136: 48 89 e5                          mov       rbp, rsp
+      401139: 48 83 ec 10                       sub       rsp, 0x10
+      40113d: b8 00 00 00 00                    mov       eax, 0
+(sdb) break 401136
+** set a breakpoint at 0x401136.
+(sdb) break 40113d
+** set a breakpoint at 0x40113d.
+(sdb) info break
+Num     Address
+0       0x401136
+1       0x40113d
+(sdb) si
+      401135: 55                                push      rbp
+      401136: 48 89 e5                          mov       rbp, rsp
+      401139: 48 83 ec 10                       sub       rsp, 0x10
+      40113d: b8 00 00 00 00                    mov       eax, 0
+      401142: e8 3f ff ff ff                    call      0x401086
+(sdb) si
+** hit a breakpoint at 0x401136.
+      401136: 48 89 e5                          mov       rbp, rsp
+      401139: 48 83 ec 10                       sub       rsp, 0x10
+      40113d: b8 00 00 00 00                    mov       eax, 0
+      401142: e8 3f ff ff ff                    call      0x401086
+      401147: 89 45 fc                          mov       dword ptr [rbp - 4], eax
+(sdb) cont
+** hit a breakpoint at 0x40113d.
+      40113d: b8 00 00 00 00                    mov       eax, 0
+      401142: e8 3f ff ff ff                    call      0x401086
+      401147: 89 45 fc                          mov       dword ptr [rbp - 4], eax
+      40114a: b8 00 00 00 00                    mov       eax, 0
+      40114f: e8 5d ff ff ff                    call      0x4010b1
+(sdb) info reg
+$rax 0x0000000000000000 $rbx 0x0000000000000000 $rcx 0x0000000000000000
+$rdx 0x0000000000000000 $rsi 0x0000000000000000 $rdi 0x0000000000000000
+$rbp 0x00007ffd01d6ab88 $rsp 0x00007ffd01d6ab78 $r8  0x0000000000000000
+$r9  0x0000000000000000 $r10 0x0000000000000000 $r11 0x0000000000000000
+$r12 0x0000000000000000 $r13 0x0000000000000000 $r14 0x0000000000000000
+$r15 0x0000000000000000 $rip 0x000000000040113d $eflags 0x0000000000000206
+(sdb) cont
+this is callee
+hello world
+hello unix
+** the target program terminated.
+```
+
+## Hidden Case 5
+- input: `./sdb ./deep`
+```
+break 40109c
+info break
+break 401031
+info break
+delete 0
+info break
+delete 3
+info break
+cont
+info break
+cont
+```
+- output
+
+```
+** program &#39;./deep&#39; loaded. entry point 0x401131.
+      401131: f3 0f 1e fa                       endbr64   
+      401135: 55                                push      rbp
+      401136: 48 89 e5                          mov       rbp, rsp
+      401139: 48 83 ec 10                       sub       rsp, 0x10
+      40113d: b8 00 00 00 00                    mov       eax, 0
+(sdb) break 40109c
+** set a breakpoint at 0x40109c.
+(sdb) info break
+Num     Address
+0       0x40109c
+(sdb) break 401031
+** set a breakpoint at 0x401031.
+(sdb) info break
+Num     Address
+0       0x40109c
+1       0x401031
+(sdb) delete 0
+** delete breakpoint 0.
+(sdb) info break
+Num     Address
+1       0x401031
+(sdb) delete 3
+** breakpoint 3 does not exist.
+(sdb) info break
+Num     Address
+1       0x401031
+(sdb) cont
+** hit a breakpoint at 0x401031.
+      401031: 48 89 c6                          mov       rsi, rax
+      401034: bf 01 00 00 00                    mov       edi, 1
+      401039: e8 20 01 00 00                    call      0x40115e
+      40103e: 90                                nop       
+      40103f: c9                                leave     
+(sdb) info break
+Num     Address
+1       0x401031
+(sdb) cont
+this is callee
+hello world
+hello unix
+** the target program terminated.
+```
+
+## Hidden Case 6
+- input: `./sdb ./game`
+```
+break 0x4010f1
+syscall
+syscall
+syscall
+syscall
+3
+syscall
+syscall
+```
+- output: 
+```
+** program &#39;./game&#39; loaded. entry point 0x401000.
+      401000: b9 05 00 00 00                    mov       ecx, 5
+      401005: 48 83 f9 00                       cmp       rcx, 0
+      401009: 74 1f                             je        0x40102a
+      40100b: e8 2b 00 00 00                    call      0x40103b
+      401010: e8 5c 00 00 00                    call      0x401071
+(sdb) break 0x4010f1
+** set a breakpoint at 0x4010f1.
+(sdb) syscall
+** enter a syscall(1) at 0x401052.
+      401052: 0f 05                             syscall   
+      401054: 59                                pop       rcx
+      401055: c3                                ret       
+      401056: 51                                push      rcx
+      401057: b8 01 00 00 00                    mov       eax, 1
+(sdb) syscall
+guess a number : 
+** leave a syscall(1) = 18 at 0x401052.
+      401052: 0f 05                             syscall   
+      401054: 59                                pop       rcx
+      401055: c3                                ret       
+      401056: 51                                push      rcx
+      401057: b8 01 00 00 00                    mov       eax, 1
+(sdb) syscall
+** enter a syscall(0) at 0x401088.
+      401088: 0f 05                             syscall   
+      40108a: 59                                pop       rcx
+      40108b: c3                                ret       
+      40108c: 51                                push      rcx
+      40108d: b8 00 00 00 00                    mov       eax, 0
+(sdb) syscall
+3
+** leave a syscall(0) = 2 at 0x401088.
+      401088: 0f 05                             syscall   
+      40108a: 59                                pop       rcx
+      40108b: c3                                ret       
+      40108c: 51                                push      rcx
+      40108d: b8 00 00 00 00                    mov       eax, 0
+(sdb) syscall
+** hit a breakpoint at 0x4010f1.
+      4010f1: 48 8d 35 2b 0f 00 00              lea       rsi, [rip + 0xf2b]
+      4010f8: ba 06 00 00 00                    mov       edx, 6
+      4010fd: 0f 05                             syscall   
+      4010ff: 59                                pop       rcx
+      401100: c3                                ret       
+(sdb) syscall
+** enter a syscall(1) at 0x4010fd.
+      4010fd: 0f 05                             syscall   
+      4010ff: 59                                pop       rcx
+      401100: c3                                ret       
+      401101: b8 3c 00 00 00                    mov       eax, 0x3c
+      401106: 48 31 ff                          xor       rdi, rdi
+```
+
+
+</div>
+    <div class="ui-toc dropup unselectable hidden-print" style="display:none;">
+        <div class="pull-right dropdown">
+            <a id="tocLabel" class="ui-toc-label btn btn-default" data-toggle="dropdown" href="#" role="button" aria-haspopup="true" aria-expanded="false" title="Table of content">
+                <i class="fa fa-bars"></i>
+            </a>
+            <ul id="ui-toc" class="ui-toc-dropdown dropdown-menu" aria-labelledby="tocLabel">
+            </ul>
+        </div>
+    </div>
+    <div id="ui-toc-affix" class="ui-affix-toc ui-toc-dropdown unselectable hidden-print" data-spy="affix" style="display:none;"></div>
+    
+</body>
+
+</html>
+<script src="/js/mathjax-config-extra.js"></script>
+
+<script src="/build/MathJax/MathJax.js" defer></script>
+<script src="/build/MathJax/config/TeX-AMS-MML_HTMLorMML.js" defer></script>
+<script src="/build/MathJax/config/Safe.js" defer></script>
+<script src="/config"></script><script src="/build/common.1349a0316c4d8448fc8a.js" defer="defer"></script><script src="/build/pretty-pack.7d6d83ca1bdc20fcbeac.js" defer="defer"></script>
+
+
+
